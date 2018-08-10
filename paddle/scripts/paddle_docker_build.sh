@@ -50,6 +50,9 @@ EOL
         -d \
         --name $CONTAINER_ID \
         ${DOCKER_ENV} \
+        -e CONTENT_DEC_PASSWD=$CONTENT_DEC_PASSWD \
+        -e TRAVIS_BRANCH=$TRAVIS_BRANCH \
+        -e TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST \
         -v $PADDLE_ROOT:/paddle \
         -w /paddle \
         $IMG \
