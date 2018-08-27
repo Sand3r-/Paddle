@@ -26,6 +26,51 @@ using mkldnn::stream;
 using platform::to_void_cast;
 using platform::GetMKLDNNFormat;
 
+#include <x86intrin.h>
+#define INIT_PERF() static RtdscHelper rtdsc_helper
+#define MAKE_PERF_VAR() unsigned long long perf = 0; (void) perf
+#define BEGIN() perf = __rdtsc()
+#define END(name) rtdsc_helper.AddMeasurement(name, __rdtsc() - perf)
+#define BEGIN_OVERALL() unsigned long long overall = __rdtsc()
+#define END_OVERALL() rtdsc_helper.AddMeasurement("Overall", __rdtsc() - overall)
+
+class RtdscHelper
+{
+using uint64 = unsigned long long;
+public:
+  void AddMeasurement(std::string name, uint64 time) {
+    if(m_Measurements.find(name) != m_Measurements.end()) {
+      m_Measurements[name].first += time;
+      m_Measurements[name].second++;
+    }
+    else
+      m_Measurements[name] = {time, 1};
+  }
+
+  void PrintResults() {
+    std::cout << "Convolution measurements" << std::endl;
+    auto width = std::setw(20);
+    std::cout << std::left << width << "Name"
+                           << width << "Avg Time"
+                           << width << "Ratio" << std::endl;
+    auto overall_m = m_Measurements["Overall"];
+    auto overall = overall_m.first / (double) overall_m.second;
+    for(auto const& m : m_Measurements) {
+      auto average = m.second.first / (double) m.second.second;
+      std::cout << std::left << width << m.first
+                             << width << average
+                             << width << average / overall << std::endl;
+    }
+    std::cout << "------------------------" << std::endl;
+  }
+
+  ~RtdscHelper() {
+    PrintResults();
+  }
+private:
+  std::map<std::string, std::pair<uint64, unsigned>> m_Measurements; // name, time, count
+};
+
 class ConvMKLDNNHandler : public platform::MKLDNNHandler {
  public:
   ConvMKLDNNHandler(
@@ -265,7 +310,11 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
   void Compute(const paddle::framework::ExecutionContext& ctx) const override {
     PADDLE_ENFORCE(paddle::platform::is_cpu_place(ctx.GetPlace()),
                    "It must use CPUPlace.");
+    INIT_PERF();
+    MAKE_PERF_VAR();
+    BEGIN_OVERALL();
 
+    BEGIN();
     auto& dev_ctx =
         ctx.template device_context<paddle::platform::MKLDNNDeviceContext>();
     const auto& mkldnn_engine = dev_ctx.GetEngine();
@@ -312,11 +361,17 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
         paddle::framework::vectorize2int(filter->dims());
     std::vector<int> dst_tz = paddle::framework::vectorize2int(output->dims());
 
+    END("Data preparation");
+    BEGIN();
+
     // Get unique name for storing MKLDNN primitives
     const std::string key = ConvMKLDNNHandler::GetHash(
         src_tz, weights_tz, strides, paddings, dilations, groups,
         ctx.op().Output("Output"));
     const std::string key_conv_pd = key + "@conv_pd";
+
+    END("Hash computation");
+    BEGIN();
 
     std::vector<primitive> pipeline;
 
@@ -393,12 +448,18 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
                                           dst_memory_p);
     }
 
+    END("Primitives creation");
+    BEGIN();
+
     // push primitive to stream and wait until it's executed
     pipeline.push_back(*conv_p);
     stream(stream::kind::eager).submit(pipeline).wait();
 
     output->set_layout(DataLayout::kMKLDNN);
     output->set_format(GetMKLDNNFormat(*dst_memory_p));
+
+    END("Execution");
+    END_OVERALL();
   }
 
  private:

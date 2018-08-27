@@ -28,6 +28,51 @@ using mkldnn::stream;
 using paddle::platform::MKLDNNDeviceContext;
 using paddle::platform::MKLDNNMemDesc;
 using platform::to_void_cast;
+#include <x86intrin.h>
+
+#define INIT_PERF() static RtdscHelper rtdsc_helper
+#define MAKE_PERF_VAR() unsigned long long perf = 0; (void) perf
+#define BEGIN() perf = __rdtsc()
+#define END(name) rtdsc_helper.AddMeasurement(name, __rdtsc() - perf)
+#define BEGIN_OVERALL() unsigned long long overall = __rdtsc()
+#define END_OVERALL() rtdsc_helper.AddMeasurement("Overall", __rdtsc() - overall)
+
+class RtdscHelper
+{
+using uint64 = unsigned long long;
+public:
+  void AddMeasurement(std::string name, uint64 time) {
+    if(m_Measurements.find(name) != m_Measurements.end()) {
+      m_Measurements[name].first += time;
+      m_Measurements[name].second++;
+    }
+    else
+      m_Measurements[name] = {time, 1};
+  }
+
+  void PrintResults() {
+    std::cout << "Bn measurement results" << std::endl;
+    auto width = std::setw(20);
+    std::cout << std::left << width << "Name"
+                           << width << "Avg Time"
+                           << width << "Ratio" << std::endl;
+    auto overall_m = m_Measurements["Overall"];
+    auto overall = overall_m.first / (double) overall_m.second;
+    for(auto const& m : m_Measurements) {
+      auto average = m.second.first / (double) m.second.second;
+      std::cout << std::left << width << m.first
+                             << width << average
+                             << width << average / overall << std::endl;
+    }
+    std::cout << "------------------------" << std::endl;
+  }
+
+  ~RtdscHelper() {
+    PrintResults();
+  }
+private:
+  std::map<std::string, std::pair<uint64, unsigned>> m_Measurements; // name, time, count
+};
 
 namespace {
 template <typename T>
@@ -63,6 +108,11 @@ template <typename T>
 class BatchNormMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
  public:
   void Compute(const framework::ExecutionContext &ctx) const override {
+    INIT_PERF();
+    MAKE_PERF_VAR();
+    BEGIN_OVERALL();
+
+    BEGIN();
     const float epsilon = ctx.Attr<float>("epsilon");
     const float momentum = ctx.Attr<float>("momentum");
     const bool is_test = ctx.Attr<bool>("is_test");
@@ -110,6 +160,9 @@ class BatchNormMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     PADDLE_ENFORCE(scale_tz.size() == 1, "Dims of scale tensor is NOT 1");
     const unsigned int ic = scale_tz[0];
 
+    END("Data preparation");
+    BEGIN();
+
     unsigned flags = mkldnn::use_scale_shift;
     if (is_test) flags |= mkldnn::use_global_stats;
     if (fuse_with_relu) flags |= mkldnn::fuse_bn_relu;
@@ -151,6 +204,8 @@ class BatchNormMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     // create mkldnn memory for output y tensor
     auto dst_memory = memory(batch_norm_fwd_pd->dst_primitive_desc(), y_data);
 
+    END("Primitives");
+    BEGIN();
     if (is_test) {
       // create mkldnn memory for stats (as input)
       auto mean_memory = memory(batch_norm_fwd_pd->mean_primitive_desc(),
@@ -196,6 +251,9 @@ class BatchNormMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     y->set_layout(DataLayout::kMKLDNN);
     y->set_format(
         (memory::format)dst_memory.get_primitive_desc().desc().data.format);
+    END("Execution");
+    BEGIN();
+    END_OVERALL();
   }
 };
 
