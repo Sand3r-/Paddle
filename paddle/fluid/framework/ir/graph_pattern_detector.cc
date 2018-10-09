@@ -872,6 +872,40 @@ PDNode *patterns::FCMKLDNN::operator()(paddle::framework::ir::PDNode *x,
   return fc_out_var;
 }
 
+PDNode *patterns::FCReLU::operator()(paddle::framework::ir::PDNode *x,
+                                     bool with_bias) {
+  // Create shared nodes.
+  x->assert_is_op_input("fc", "Input");
+
+  auto *fc_op = pattern->NewNode(fc_repr())->assert_is_op("fc");
+  auto *relu_op = pattern->NewNode(relu_repr())->assert_is_op("relu");
+  // Create variables
+  // Filter
+  auto *fc_weight_var = pattern->NewNode(weights_repr())
+                            ->AsInput()
+                            ->assert_is_persistable_var()
+                            ->assert_is_op_input("fc", "W");
+  // Bias
+  auto *fc_bias_var = pattern->NewNode(bias_repr())
+                          ->AsInput()
+                          ->assert_is_persistable_var()
+                          ->assert_is_op_input("fc", "Bias");
+  // FC Output
+  auto *fc_out_var = pattern->NewNode(fc_output_repr())
+                         ->AsOutput()
+                         ->assert_is_op_output("fc", "Out")
+                         ->assert_is_only_output_of_op("fc");
+
+  // ReLU Output
+  auto *relu_out_var = pattern->NewNode(fc_output_repr())
+                           ->AsOutput()
+                           ->assert_is_only_output_of_op("relu");
+
+  fc_op->LinksFrom({x, fc_weight_var, fc_bias_var}).LinksTo({fc_out_var});
+  relu_op->LinksFrom({fc_out_var}).LinksTo({relu_out_var});
+  return relu_out_var;
+}
+
 PDNode *patterns::Embedding::operator()(PDNode *x) {
   x->assert_is_op_input("lookup_table", "Ids");
   auto *lookup_table_op =
