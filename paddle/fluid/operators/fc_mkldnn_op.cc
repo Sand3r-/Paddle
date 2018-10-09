@@ -118,8 +118,19 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
       fc_desc_p.reset(new inner_product_forward::desc(
           prop_kind::forward, fc_src_md, fc_weights_md, fc_dst_md));
     }
-    auto fc_prim_desc =
-        inner_product_forward::primitive_desc(*fc_desc_p, mkldnn_engine);
+    mkldnn::primitive_attr attributes;
+    if (ctx.Attr<bool>("fuse_relu")) {
+      mkldnn::post_ops post_operations;
+      constexpr float scale = 1.0f;
+      constexpr float negative_slope = 0.0f;
+      constexpr float placeholder = 0.0f;
+      post_operations.append_eltwise(scale, mkldnn::algorithm::eltwise_relu,
+                                     negative_slope, placeholder);
+      attributes.set_post_ops(post_operations);
+    }
+
+    auto fc_prim_desc = inner_product_forward::primitive_desc(
+        *fc_desc_p, attributes, mkldnn_engine);
 
     auto fc_dst_memory_pd = fc_prim_desc.dst_primitive_desc();
     auto fc_dst_memory_sz = fc_dst_memory_pd.get_size();
