@@ -525,6 +525,22 @@ struct FCReLU : public PatternBase {
   PATTERN_DECL_NODE(relu_output);
 };
 
+struct FCSigmoid : public PatternBase {
+  FCSigmoid(PDPattern* pattern, const std::string& name_scope)
+      : PatternBase(pattern, name_scope, "fc_sigmoid") {}
+
+  PDNode* operator()(PDNode* x, bool with_bias);
+
+  // declare operator node's name
+  PATTERN_DECL_NODE(fc);
+  PATTERN_DECL_NODE(sigmoid);
+  // declare variable node's name
+  PATTERN_DECL_NODE(weights);
+  PATTERN_DECL_NODE(bias);
+  PATTERN_DECL_NODE(fc_output);
+  PATTERN_DECL_NODE(sigmoid_output);
+};
+
 // Embedding
 struct Embedding : public PatternBase {
   Embedding(PDPattern* pattern, const std::string& name_scope)

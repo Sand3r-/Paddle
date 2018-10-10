@@ -31,6 +31,16 @@ using mkldnn::primitive;
 using mkldnn::stream;
 using mkldnn::prop_kind;
 
+static mkldnn::primitive_attr CreateActivationPostOp(mkldnn::algorithm type) {
+  mkldnn::primitive_attr attributes;
+  mkldnn::post_ops post_operations;
+  constexpr float scale = 1.0f;
+  constexpr float ignored_param = 0.0f;
+  post_operations.append_eltwise(scale, type, ignored_param, ignored_param);
+  attributes.set_post_ops(post_operations);
+  return attributes;
+}
+
 template <typename T>
 class FCMKLDNNOpKernel : public framework::OpKernel<T> {
  public:
@@ -120,13 +130,9 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     }
     mkldnn::primitive_attr attributes;
     if (ctx.Attr<bool>("fuse_relu")) {
-      mkldnn::post_ops post_operations;
-      constexpr float scale = 1.0f;
-      constexpr float negative_slope = 0.0f;
-      constexpr float placeholder = 0.0f;
-      post_operations.append_eltwise(scale, mkldnn::algorithm::eltwise_relu,
-                                     negative_slope, placeholder);
-      attributes.set_post_ops(post_operations);
+      attributes = CreateActivationPostOp(mkldnn::algorithm::eltwise_relu);
+    } else if (ctx.Attr<bool>("fuse_sigmoid")) {
+      attributes = CreateActivationPostOp(mkldnn::algorithm::eltwise_logistic);
     }
 
     auto fc_prim_desc = inner_product_forward::primitive_desc(

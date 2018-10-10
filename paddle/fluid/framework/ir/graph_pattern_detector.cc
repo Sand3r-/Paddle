@@ -897,13 +897,47 @@ PDNode *patterns::FCReLU::operator()(paddle::framework::ir::PDNode *x,
                          ->assert_is_only_output_of_op("fc");
 
   // ReLU Output
-  auto *relu_out_var = pattern->NewNode(fc_output_repr())
+  auto *relu_out_var = pattern->NewNode(relu_output_repr())
                            ->AsOutput()
                            ->assert_is_only_output_of_op("relu");
 
   fc_op->LinksFrom({x, fc_weight_var, fc_bias_var}).LinksTo({fc_out_var});
   relu_op->LinksFrom({fc_out_var}).LinksTo({relu_out_var});
   return relu_out_var;
+}
+
+PDNode *patterns::FCSigmoid::operator()(paddle::framework::ir::PDNode *x,
+                                        bool with_bias) {
+  // Create shared nodes.
+  x->assert_is_op_input("fc", "Input");
+
+  auto *fc_op = pattern->NewNode(fc_repr())->assert_is_op("fc");
+  auto *sigmoid_op = pattern->NewNode(sigmoid_repr())->assert_is_op("sigmoid");
+  // Create variables
+  // Filter
+  auto *fc_weight_var = pattern->NewNode(weights_repr())
+                            ->AsInput()
+                            ->assert_is_persistable_var()
+                            ->assert_is_op_input("fc", "W");
+  // Bias
+  auto *fc_bias_var = pattern->NewNode(bias_repr())
+                          ->AsInput()
+                          ->assert_is_persistable_var()
+                          ->assert_is_op_input("fc", "Bias");
+  // FC Output
+  auto *fc_out_var = pattern->NewNode(fc_output_repr())
+                         ->AsOutput()
+                         ->assert_is_op_output("fc", "Out")
+                         ->assert_is_only_output_of_op("fc");
+
+  // sigmoid Output
+  auto *sigmoid_out_var = pattern->NewNode(sigmoid_output_repr())
+                              ->AsOutput()
+                              ->assert_is_only_output_of_op("sigmoid");
+
+  fc_op->LinksFrom({x, fc_weight_var, fc_bias_var}).LinksTo({fc_out_var});
+  sigmoid_op->LinksFrom({fc_out_var}).LinksTo({sigmoid_out_var});
+  return sigmoid_out_var;
 }
 
 PDNode *patterns::Embedding::operator()(PDNode *x) {
