@@ -109,6 +109,9 @@ void FCOpMaker::Make() {
       .SetDefault(false);
   AddAttr<bool>("fuse_relu", "(bool, default false) Only used in mkldnn kernel")
       .SetDefault(false);
+  AddAttr<bool>("fuse_sigmoid",
+                "(bool, default false) Only used in mkldnn kernel")
+      .SetDefault(false);
   AddComment(R"DOC(
   Fully Connected Operator.
 
