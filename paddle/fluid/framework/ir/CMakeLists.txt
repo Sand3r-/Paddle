@@ -45,6 +45,7 @@ if(WITH_MKLDNN)
     pass_library(conv_relu_mkldnn_fuse_pass inference)
     pass_library(conv_elementwise_add_mkldnn_fuse_pass inference)
     pass_library(fc_mkldnn_pass inference)
+    pass_library(fc_relu_mkldnn_fuse_pass inference)
     pass_library(fc_sigmoid_mkldnn_fuse_pass inference)
 endif()
 
