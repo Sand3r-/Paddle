@@ -84,6 +84,7 @@ class Analyzer : public OrderedRegistry<PassManager> {
       "conv_elementwise_add_mkldnn_fuse_pass",  //
       "fc_mkldnn_pass",                         //
       "fc_relu_mkldnn_fuse_pass",               //
+      "fc_sigmoid_mkldnn_fuse_pass",               //
 #endif
   }};
 

@@ -81,15 +81,18 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
 
     // flatten the input dimensions to 2d if necessary
     if (input->dims().size() == 4) {
-//      fc_src_md =
-//          platform::MKLDNNMemDesc(fc_src_tz, platform::MKLDNNGetDataType<T>(),
-//                                  mkldnn::memory::format::nchw);
-//      auto fc_src_memory_pd =
-//          memory::primitive_desc(fc_usr_src_md, mkldnn_engine);
-//      auto fc_src_memory = memory(fc_usr_src_memory_pd);
-//      auto reorder = mkldnn::reorder(fc_usr_src_memory, fc_src_memory);
-//      std::vector<mkldnn::primitive> pipeline{reorder};
-//      stream(stream::kind::eager).submit(pipeline).wait();
+      // reorder if input uses block format
+      if(input->format() != mkldnn::memory::format::nchw) {
+        fc_src_md =
+            platform::MKLDNNMemDesc(fc_src_tz, platform::MKLDNNGetDataType<T>(),
+                                    mkldnn::memory::format::nchw);
+        auto fc_src_memory_pd =
+            memory::primitive_desc(fc_usr_src_md, mkldnn_engine);
+        auto fc_src_memory = memory(fc_usr_src_memory_pd);
+        auto reorder = mkldnn::reorder(fc_usr_src_memory, fc_src_memory);
+        std::vector<mkldnn::primitive> pipeline{reorder};
+        stream(stream::kind::eager).submit(pipeline).wait();
+      }
       fc_src_tz = {fc_src_tz[0], fc_src_tz[1] * fc_src_tz[2] * fc_src_tz[3]};
 
       fc_src_md =
@@ -128,11 +131,19 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
       fc_desc_p.reset(new inner_product_forward::desc(
           prop_kind::forward, fc_src_md, fc_weights_md, fc_dst_md));
     }
+    std::shared_ptr<mkldnn::eltwise_forward::primitive_desc> forward_pd;
     mkldnn::primitive_attr attributes;
     if (ctx.Attr<bool>("fuse_relu")) {
       attributes = CreateActivationPostOp(mkldnn::algorithm::eltwise_relu);
     } else if (ctx.Attr<bool>("fuse_sigmoid")) {
-      attributes = CreateActivationPostOp(mkldnn::algorithm::eltwise_logistic);
+//      attributes = CreateActivationPostOp(mkldnn::algorithm::eltwise_logistic);
+
+    // create primitive descriptor for activation forward and save it
+    auto forward_desc = mkldnn::eltwise_forward::desc(
+        mkldnn::prop_kind::forward_training, mkldnn::algorithm::eltwise_logistic,
+        fc_src_memory.get_primitive_desc().desc(), 0.0f, 0.0f);
+    forward_pd = std::make_shared<mkldnn::eltwise_forward::primitive_desc>(
+        forward_desc, mkldnn_engine);
     }
 
     auto fc_prim_desc = inner_product_forward::primitive_desc(
@@ -152,6 +163,15 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
 
     // push primitive to stream and wait until it's executed
     std::vector<mkldnn::primitive> pipeline{fc};
+
+    if(ctx.Attr<bool>("fuse_sigmoid")) {
+
+      // create activation primitive
+      auto sigmoid = std::make_shared<mkldnn::eltwise_forward>(*forward_pd, fc_dst_memory,
+                                                      fc_dst_memory);
+      pipeline.push_back(*sigmoid);
+    }
+
     stream(stream::kind::eager).submit(pipeline).wait();
 
     output->set_layout(DataLayout::kMKLDNN);
