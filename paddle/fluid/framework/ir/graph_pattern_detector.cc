@@ -83,7 +83,7 @@ void GraphPatternDetector::operator()(Graph *graph,
   }
 
   auto subgraphs = DetectPatterns();
-  UniquePatterns(&subgraphs);
+//  UniquePatterns(&subgraphs);
   RemoveOverlappedMatch(&subgraphs);
   ValidateByNodeRole(&subgraphs);
 

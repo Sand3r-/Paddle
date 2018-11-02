@@ -41,6 +41,42 @@ static mkldnn::primitive_attr CreateActivationPostOp(mkldnn::algorithm type) {
   return attributes;
 }
 
+class SigmoidMKLDNNHandler : public platform::MKLDNNHandler {
+ public:
+  SigmoidMKLDNNHandler(
+      std::shared_ptr<mkldnn::eltwise_forward::primitive_desc> sigmoid_pd,
+      const platform::MKLDNNDeviceContext& dev_ctx, mkldnn::engine engine,
+      const std::string& base_key)
+      : platform::MKLDNNHandler(dev_ctx, engine, base_key),
+        sigmoid_pd_(sigmoid_pd) {}
+
+  std::shared_ptr<mkldnn::eltwise_forward> AcquireSigmoid(
+      std::shared_ptr<mkldnn::memory> dst_memory_p,
+      std::shared_ptr<mkldnn::memory> src_memory_p) {
+    /*Generate key*/
+    auto prim_key = key_ + "@sigmoid_p";
+
+    auto sigmoid_p = std::static_pointer_cast<mkldnn::eltwise_forward>(
+        dev_ctx_.GetBlob(prim_key));
+    PADDLE_ENFORCE((sigmoid_p != nullptr) || (is_reusing_ == false),
+                   "Fail to find sigmoid primitive in device context");
+    if (sigmoid_p == nullptr) {
+      sigmoid_p = std::make_shared<mkldnn::eltwise_forward>(
+          *(sigmoid_pd_.get()),
+          *(static_cast<mkldnn::memory*>(src_memory_p.get())),
+          *(static_cast<mkldnn::memory*>(dst_memory_p.get())));
+      dev_ctx_.SetBlob(prim_key, sigmoid_p);
+    } else {
+      is_reusing_ = true;
+    }
+
+    return sigmoid_p;
+  }
+
+ private:
+  std::shared_ptr<mkldnn::eltwise_forward::primitive_desc> sigmoid_pd_;
+};
+
 template <typename T>
 class FCMKLDNNOpKernel : public framework::OpKernel<T> {
  public:
@@ -63,6 +99,10 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     std::vector<int> fc_dst_tz =
         paddle::framework::vectorize2int(output->dims());
 
+//    const std::string key =
+//        platform::MKLDNNHandler::GetHash(fc_src_tz, ctx.op().Output("Out"));
+//    const std::string key_softmax_pd = key + "@sigmoid_pd";
+
     // MKLDNN requires weights layout to be column major.
     // The values have already been transposed, but the shape needs to be fixed.
     // It cannot be done during an earlier stage since InferShape verifies
@@ -82,7 +122,7 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     // flatten the input dimensions to 2d if necessary
     if (input->dims().size() == 4) {
       // reorder if input uses block format
-      if(input->format() != mkldnn::memory::format::nchw) {
+      if(false && input->format() != mkldnn::memory::format::nchw) {
         fc_src_md =
             platform::MKLDNNMemDesc(fc_src_tz, platform::MKLDNNGetDataType<T>(),
                                     mkldnn::memory::format::nchw);
@@ -104,7 +144,7 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     }
 
     auto fc_weights_md = platform::MKLDNNMemDesc(
-        fc_weights_tz, platform::MKLDNNGetDataType<T>(), w->format());
+        fc_weights_tz, platform::MKLDNNGetDataType<T>(), mkldnn::memory::format::oi);
     auto fc_weights_memory_pd =
         memory::primitive_desc(fc_weights_md, mkldnn_engine);
     auto fc_weights_memory =
@@ -126,24 +166,14 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
           new memory(fc_bias_memory_pd, to_void_cast<T>(bias->data<T>())));
 
       fc_desc_p.reset(new inner_product_forward::desc(
-          prop_kind::forward, fc_src_md, fc_weights_md, fc_bias_md, fc_dst_md));
+          prop_kind::forward_scoring, fc_src_md, fc_weights_md, fc_bias_md, fc_dst_md));
     } else {
       fc_desc_p.reset(new inner_product_forward::desc(
-          prop_kind::forward, fc_src_md, fc_weights_md, fc_dst_md));
+          prop_kind::forward_scoring, fc_src_md, fc_weights_md, fc_dst_md));
     }
-    std::shared_ptr<mkldnn::eltwise_forward::primitive_desc> forward_pd;
     mkldnn::primitive_attr attributes;
     if (ctx.Attr<bool>("fuse_relu")) {
       attributes = CreateActivationPostOp(mkldnn::algorithm::eltwise_relu);
-    } else if (ctx.Attr<bool>("fuse_sigmoid")) {
-//      attributes = CreateActivationPostOp(mkldnn::algorithm::eltwise_logistic);
-
-    // create primitive descriptor for activation forward and save it
-    auto forward_desc = mkldnn::eltwise_forward::desc(
-        mkldnn::prop_kind::forward_training, mkldnn::algorithm::eltwise_logistic,
-        fc_src_memory.get_primitive_desc().desc(), 0.0f, 0.0f);
-    forward_pd = std::make_shared<mkldnn::eltwise_forward::primitive_desc>(
-        forward_desc, mkldnn_engine);
     }
 
     auto fc_prim_desc = inner_product_forward::primitive_desc(
@@ -165,11 +195,20 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     std::vector<mkldnn::primitive> pipeline{fc};
 
     if(ctx.Attr<bool>("fuse_sigmoid")) {
-
-      // create activation primitive
-      auto sigmoid = std::make_shared<mkldnn::eltwise_forward>(*forward_pd, fc_dst_memory,
-                                                      fc_dst_memory);
-      pipeline.push_back(*sigmoid);
+//      auto forward_desc = mkldnn::eltwise_forward::desc(
+//        mkldnn::prop_kind::forward_training, mkldnn::algorithm::eltwise_logistic,
+//        fc_dst_memory.get_primitive_desc().desc(), 0.0f, 0.0f);
+//      auto forward_pd = std::make_shared<mkldnn::eltwise_forward::primitive_desc>(
+//          forward_desc, mkldnn_engine);
+//      dev_ctx.SetBlob(key_softmax_pd, forward_pd);
+//      SigmoidMKLDNNHandler handler(forward_pd, dev_ctx, mkldnn_engine, key);
+//      auto sigmoid =
+//          handler.AcquireSigmoid(std::make_shared<mkldnn::memory>(fc_dst_memory), std::make_shared<mkldnn::memory>(fc_dst_memory));
+//
+//      // create activation primitive
+////      auto sigmoid = std::make_shared<mkldnn::eltwise_forward>(*forward_pd, fc_dst_memory,
+////                                                      fc_dst_memory);
+//      pipeline.push_back(*sigmoid);
     }
 
     stream(stream::kind::eager).submit(pipeline).wait();

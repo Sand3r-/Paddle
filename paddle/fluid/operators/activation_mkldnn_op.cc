@@ -302,6 +302,10 @@ using ReluMKLDNNFunctor =
     MKLDNNActivationFunc<T, mkldnn::algorithm::eltwise_relu>;
 
 template <typename T>
+using SigmoidMKLDNNFunctor =
+    MKLDNNActivationFunc<T, mkldnn::algorithm::eltwise_logistic>;
+
+template <typename T>
 using TanhMKLDNNFunctor =
     MKLDNNActivationFunc<T, mkldnn::algorithm::eltwise_tanh>;
 
@@ -316,6 +320,10 @@ using AbsMKLDNNFunctor =
 template <typename T>
 using ReluMKLDNNGradFunctor =
     MKLDNNActivationGradFunc<T, mkldnn::algorithm::eltwise_relu>;
+
+template <typename T>
+using SigmoidMKLDNNGradFunctor =
+    MKLDNNActivationGradFunc<T, mkldnn::algorithm::eltwise_logistic>;
 
 template <typename T>
 using TanhMKLDNNGradFunctor =
@@ -342,6 +350,7 @@ namespace ops = paddle::operators;
 
 #define FOR_EACH_MKLDNN_KERNEL_FUNCTOR(__macro)            \
   __macro(relu, ReluMKLDNNFunctor, ReluMKLDNNGradFunctor); \
+  __macro(sigmoid, SigmoidMKLDNNFunctor, SigmoidMKLDNNGradFunctor); \
   __macro(tanh, TanhMKLDNNFunctor, TanhMKLDNNGradFunctor); \
   __macro(sqrt, SqrtMKLDNNFunctor, SqrtMKLDNNGradFunctor); \
   __macro(abs, AbsMKLDNNFunctor, AbsMKLDNNGradFunctor);
