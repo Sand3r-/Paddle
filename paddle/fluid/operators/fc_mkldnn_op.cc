@@ -45,7 +45,7 @@ class FCPrimitiveFactory {
                                           const Tensor* weights,
                                           const Tensor* bias, Tensor* output,
                                           const ExecutionContext& ctx) {
-    if (fc_ && IsOutputSame(output, ctx)) {
+    if (false && fc_ && IsOutputSame(output, ctx)) {
       if (output->format() == memory::format::format_undef) {
         auto output_format = output_->get_primitive_desc().desc().data.format;
         output->set_format((memory::format)output_format);
