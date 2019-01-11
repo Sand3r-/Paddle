@@ -263,17 +263,11 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     stream(stream::kind::eager).submit({fc}).wait();
 
     std::cout.precision(10);
-    std::cout << "FC Output" << std::endl;
-    auto output_data = output->data<T>();
-    for(unsigned i = 0; i < output->numel(); i++) {
-      std::cout << output_data[i] << std::endl;
+    std::cout << "FC Input" << std::endl;
+    auto input_data = input->data<T>();
+    for(unsigned i = 0; i < input->numel(); i++) {
+      std::cout << input_data[i] << std::endl;
     }
-    std::cout << "FC Weights" << std::endl;
-    auto w_data = w->data<T>();
-    for(unsigned i = 0; i < w->numel(); i++) {
-      std::cout << w_data[i] << std::endl;
-    }
-
 
     mkldnn_verbose_set(0);
 
