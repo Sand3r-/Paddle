@@ -45,7 +45,7 @@ class FCPrimitiveFactory {
                                           const Tensor* weights,
                                           const Tensor* bias, Tensor* output,
                                           const ExecutionContext& ctx) {
-    if (false && fc_ && IsOutputSame(output, ctx)) {
+    if (fc_ && IsOutputSame(output, ctx)) {
       if (output->format() == memory::format::format_undef) {
         auto output_format = output_->get_primitive_desc().desc().data.format;
         output->set_format((memory::format)output_format);
@@ -256,9 +256,19 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     auto bias = ctx.Input<Tensor>("Bias");
     auto output = ctx.Output<Tensor>("Out");
 
+    mkldnn_verbose_set(2);
+
     auto prim_creator = GetPrimitiveFactory<T>(dev_ctx, ctx, w, mkldnn_engine);
     auto fc = prim_creator->CreateFcPrimitive(input, w, bias, output, ctx);
     stream(stream::kind::eager).submit({fc}).wait();
+
+    std::cout << "FC Output" << std::endl;
+    auto output_data = output->data<T>();
+    for(unsigned i = 0; i < output->numel(); i++) {
+      std::cout << output_data[i] << std::endl;
+    }
+
+    mkldnn_verbose_set(0);
 
     output->set_layout(DataLayout::kMKLDNN);
   }
