@@ -283,6 +283,14 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
 
     output->set_layout(DataLayout::kMKLDNN);
     output->set_format(GetMKLDNNFormat(*dst_memory_p));
+     
+    std::cout.precision(10);
+    std::cout << "Conv Input" << std::endl;
+    auto limit = input->numel() < 128 ? input->numel() : 128;
+    unsigned int* int_data = (unsigned int*)input_data;
+    for(unsigned i = 0; i < limit; i++) {
+      std::cout << input_data[i] << ' ' << int_data[i] << std::endl;
+    }
   }
   void ComputeINT8(const paddle::framework::ExecutionContext& ctx) const {
     const bool is_test = ctx.Attr<bool>("is_test");
@@ -978,12 +986,6 @@ class ConvMKLDNNGradOpKernel : public paddle::framework::OpKernel<T> {
       input_grad->set_format(GetMKLDNNFormat(*diff_src_memory_p));
     }
     stream(stream::kind::eager).submit(pipeline).wait();
-    std::cout.precision(10);
-    std::cout << "Conv Input" << std::endl;
-    auto limit = input->numel() < 128 ? input->numel() : 128;
-    for(unsigned i = 0; i < limit; i++) {
-      std::cout << input_data[i] << std::endl;
-    }
   }  // Compute()
 };
 
