@@ -269,6 +269,11 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     for(unsigned i = 0; i < limit; i++) {
       std::cout << input_data[i] << std::endl;
     }
+    auto output_data = output->data<T>();
+    limit = output->numel() < 128 ? output->numel() : 128;
+    for(unsigned i = 0; i < limit; i++) {
+      std::cout << output_data[i] << std::endl;
+    }
 
     mkldnn_verbose_set(0);
 

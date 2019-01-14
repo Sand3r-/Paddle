@@ -60,13 +60,6 @@ class FeedOp : public framework::OperatorBase {
       framework::TensorCopy(feed_item, place, *dev_ctx, out_item);
     }
     out_item->set_lod(feed_item.lod());
-
-    std::cout.precision(10);
-    std::cout << "Feed Input" << std::endl;
-    auto limit = out_item->numel() < 128 ? out_item->numel() : 128;
-    for(unsigned i = 0; i < limit; i++) {
-      std::cout << ((float *)out_item->Holder()->ptr())[i] << std::endl;
-    }
   }
 };
 
