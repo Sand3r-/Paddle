@@ -206,9 +206,10 @@ class PoolMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
 
     std::cout.precision(10);
     std::cout << "Pooling Input" << std::endl;
+    unsigned int* int_in = (unsigned int*)input_data;
     auto limit = input->numel() < 128 ? input->numel() : 128;
     for(unsigned i = 0; i < limit; i++) {
-      std::cout << input_data[i] << std::endl;
+      std::cout << input_data[i] << ' ' << int_in[i] << std::endl;
     }
   }
 

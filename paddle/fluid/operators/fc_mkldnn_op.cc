@@ -264,15 +264,18 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
 
     auto input_data = input->data<T>();
     std::cout.precision(10);
+    unsigned int* int_in = (unsigned int*)input_data;
     std::cout << "FC Input" << std::endl;
     auto limit = input->numel() < 128 ? input->numel() : 128;
     for(unsigned i = 0; i < limit; i++) {
-      std::cout << input_data[i] << std::endl;
+      std::cout << input_data[i] << ' ' << int_in[i] << std::endl;
     }
     auto output_data = output->data<T>();
+    unsigned int* int_out = (unsigned int*)output_data;
+    std::cout << "FC Output" << std::endl;
     limit = output->numel() < 128 ? output->numel() : 128;
     for(unsigned i = 0; i < limit; i++) {
-      std::cout << output_data[i] << std::endl;
+      std::cout << output_data[i] << ' ' << int_out[i] << std::endl;
     }
 
     mkldnn_verbose_set(0);
