@@ -189,6 +189,14 @@ void eltwise_forward(const framework::ExecutionContext &ctx,
 
   y->set_layout(DataLayout::kMKLDNN);
   y->set_format(GetMKLDNNFormat(*dst_memory));
+
+  auto input_data = x->data<T>();
+  std::cout.precision(10);
+  std::cout << "ReLU Input" << std::endl;
+  auto limit = x->numel() < 128 ? x->numel() : 128;
+  for(unsigned i = 0; i < limit; i++) {
+    std::cout << input_data[i] << std::endl;
+  }
 }
 
 template <typename T>

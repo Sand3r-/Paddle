@@ -262,10 +262,11 @@ class FCMKLDNNOpKernel : public framework::OpKernel<T> {
     auto fc = prim_creator->CreateFcPrimitive(input, w, bias, output, ctx);
     stream(stream::kind::eager).submit({fc}).wait();
 
+    auto input_data = input->data<T>();
     std::cout.precision(10);
     std::cout << "FC Input" << std::endl;
-    auto input_data = input->data<T>();
-    for(unsigned i = 0; i < input->numel(); i++) {
+    auto limit = input->numel() < 128 ? input->numel() : 128;
+    for(unsigned i = 0; i < limit; i++) {
       std::cout << input_data[i] << std::endl;
     }
 

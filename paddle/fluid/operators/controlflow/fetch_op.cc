@@ -58,6 +58,13 @@ class FetchOp : public framework::OperatorBase {
     dst_item.set_lod(src_item.lod());
 
     VLOG(3) << "Fetch variable " << fetch_var_name << " to " << out_name;
+
+    std::cout.precision(10);
+    std::cout << "Feed Input" << std::endl;
+    auto limit = dst_item.numel() < 128 ? dst_item.numel() : 128;
+    for(unsigned i = 0; i < limit; i++) {
+      std::cout << ((float *)dst_item.Holder()->ptr())[i] << std::endl;
+    }
   }
 };
 
