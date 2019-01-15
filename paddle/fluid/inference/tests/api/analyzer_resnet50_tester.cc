@@ -77,6 +77,10 @@ void compare(bool use_mkldnn = false) {
   SetInput(&input_slots_all);
   CompareNativeAndAnalysis(
       reinterpret_cast<const PaddlePredictor::Config *>(&cfg), input_slots_all);
+
+  if (use_mkldnn) {
+    EXPECT_NEAR(0.0, 0.1, 0.00001);
+  }
 }
 
 TEST(Analyzer_resnet50, compare) { compare(); }

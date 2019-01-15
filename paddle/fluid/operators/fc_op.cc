@@ -158,6 +158,20 @@ class FCOpKernel : public framework::OpKernel<T> {
         blas, M, w_dims[1], w_dims[0], input_data, w_data, output_data,
         bias ? bias->data<T>() : NULL);
 
+    std::cout.precision(10);
+    unsigned int* int_in = (unsigned int*)input_data;
+    std::cout << "FC Input" << std::endl;
+    auto limit = input->numel() < 128 ? input->numel() : 128;
+    for(unsigned i = 0; i < limit; i++) {
+      std::cout << input_data[i] << ' ' << int_in[i] << std::endl;
+    }
+    unsigned int* int_out = (unsigned int*)output_data;
+    std::cout << "FC Output" << std::endl;
+    limit = output->numel() < 128 ? output->numel() : 128;
+    for(unsigned i = 0; i < limit; i++) {
+      std::cout << output_data[i] << ' ' << int_out[i] << std::endl;
+    }
+
     // TODO(TJ): fuse act
   }
 };
