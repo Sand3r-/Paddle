@@ -930,7 +930,7 @@ void OperatorWithKernel::RunImpl(const Scope& scope,
   // not Scope. Imperative mode only pass inputs and get outputs.
   kernel_iter->second(ExecutionContext(*this, exec_scope, *dev_ctx, ctx));
 
-  if (!transfered_inplace_vars.empty()) {
+  if (run_by_executor_ && !transfered_inplace_vars.empty()) {
     // there is inplace variable has been transfered.
     TransferInplaceVarsBack(scope, transfered_inplace_vars, *transfer_scope);
   }
