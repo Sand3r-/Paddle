@@ -15,14 +15,17 @@
 from __future__ import print_function
 
 import unittest
-
-from paddle.fluid.tests.unittests.test_sum_op import TestSumOp
+import numpy as np
+from paddle.fluid.tests.unittests.test_sum_op import TestSumOp, TestSelectedRowsSumOp
 
 
 class TestMKLDNN(TestSumOp):
     def init_kernel_type(self):
         self.use_mkldnn = True
 
+class TestSelectedMKLDNN(TestSelectedRowsSumOp):
+    def init_kernel_type(self):
+        self.use_mkldnn = True
 
 if __name__ == '__main__':
     unittest.main()

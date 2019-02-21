@@ -54,7 +54,9 @@ class TestSelectedRowsSumOp(OpTest):
         self.row_numel = 12
         self.rows = [0, 1, 2, 3, 4, 5, 6]
         self.dtype = np.float32
+        self.use_mkldnn = False
         self.init_kernel_type()
+        self.attrs = {'use_mkldnn': self.use_mkldnn}
 
     def check_with_place(self, place, inplace):
         self.check_input_and_optput(core.Scope(), place, inplace, True, True,

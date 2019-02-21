@@ -79,15 +79,6 @@ class SumMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
 
       memory::format input_format = input0.format();
 
-      if (src_tz.size() == 1 && (input_format == memory::format::nchw ||
-                                 input_format == memory::format::nhwc)) {
-        input_format = memory::format::x;
-      }
-      if (src_tz.size() == 2 && (input_format == memory::format::nchw ||
-                                 input_format == memory::format::nhwc)) {
-        input_format = memory::format::nc;
-      }
-
       for (int i = 0; i < N; i++) {
         PADDLE_ENFORCE(in_vars[i]->IsType<LoDTensor>(),
                        "all inputs must be all LoDTensors");
