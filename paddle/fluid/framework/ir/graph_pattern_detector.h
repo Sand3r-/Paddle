@@ -707,6 +707,21 @@ struct ElementwiseAdd : public PatternBase {
   PATTERN_DECL_NODE(elementwise_add_out);
 };
 
+// Transpose2 op
+// Forward pass for transpose.
+// transpose_input is the input.
+// transpose_output is a result of the operator.
+struct Transpose2 : public PatternBase {
+  Transpose2(PDPattern* pattern, const std::string& name_scope)
+      : PatternBase(pattern, name_scope, "transpose2") {}
+
+  PDNode* operator()();
+
+  PATTERN_DECL_NODE(transpose_op);
+  PATTERN_DECL_NODE(transpose_in);
+  PATTERN_DECL_NODE(transpose_out);
+};
+
 // Conv + ElementwiseAdd + an activation
 // This pattern can futher fuse the conv related ops after the conv+bn fusion.
 struct ConvElementwiseaddAct : public PatternBase {

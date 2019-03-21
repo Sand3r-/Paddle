@@ -1157,6 +1157,22 @@ PDNode *patterns::ElementwiseAdd::operator()(PDNode *x_var, PDNode *y_var) {
   return out_var;
 }
 
+PDNode *patterns::Transpose2::operator()() {
+  auto transpose_op =
+      pattern->NewNode(transpose_op_repr())->assert_is_op("transpose2");
+
+  auto input_var = pattern->NewNode(transpose_in_repr())
+                       ->AsInput()
+                       ->assert_is_op_input("transpose2", "X");
+
+  auto output_var = pattern->NewNode(transpose_out_repr())
+                        ->AsOutput()
+                        ->assert_is_op_output("transpose2", "Out");
+
+  transpose_op->LinksFrom({input_var}).LinksTo({output_var});
+  return output_var;
+}
+
 std::unordered_set<std::string> conv_act_set({"identity", "relu"});
 
 PDNode *patterns::ConvElementwiseaddAct::operator()(PDNode *conv_in) {
