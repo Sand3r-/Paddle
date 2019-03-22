@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 
 #include "paddle/fluid/operators/transpose_op.h"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -90,6 +91,12 @@ class TransposeOpMaker : public framework::OpProtoAndCheckerMaker {
         "tensor's axes according to the values given.");
     AddAttr<bool>("use_mkldnn",
                   "(bool, default false) Only used in mkldnn kernel")
+        .SetDefault(false);
+    AddAttr<bool>("use_quantizer",
+                  "(bool, default false) "
+                  "Set to true for operators that should be quantized and use "
+                  "int8 kernel. "
+                  "Only used on CPU.")
         .SetDefault(false);
     AddAttr<std::string>(
         "data_format",

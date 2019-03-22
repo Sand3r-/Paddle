@@ -216,6 +216,51 @@ void CPUQuantizePass::QuantizePool(Graph* graph) const {
   PrettyLogDetail("---    quantized %d pool2d ops", quantize_pool_count);
 }
 
+void CPUQuantizePass::QuantizeTranspose2(Graph* graph) const {
+  GraphPatternDetector gpd;
+  auto pattern = gpd.mutable_pattern();
+  patterns::Transpose2 trans_pattern{pattern, name_scope_};
+  trans_pattern();
+
+  int quantize_transpose_count = 0;
+  auto handler = [&](const GraphPatternDetector::subgraph_t& subgraph,
+                     Graph* g) {
+    VLOG(4) << "Quantize transpose2 op";
+    GET_IR_NODE_FROM_SUBGRAPH(transpose_op, transpose_op, trans_pattern);
+    auto* transpose_op_desc = transpose_op->Op();
+
+    // skip if should not be quantized
+    if (!transpose_op_desc->HasAttr("use_quantizer") ||
+        !boost::get<bool>(transpose_op_desc->GetAttr("use_quantizer")))
+      return;
+
+    GET_IR_NODE_FROM_SUBGRAPH(transpose_in, transpose_in, trans_pattern);
+    GET_IR_NODE_FROM_SUBGRAPH(transpose_out, transpose_out, trans_pattern);
+
+    // get scales calculated after warmup, they scale variables to MAX=1.0
+    auto scales = Get<VarQuantScale>("quant_var_scales");
+
+    auto input_scale = scales[transpose_in->Name()].second.data<double>()[0];
+    bool is_input_unsigned = scales[transpose_in->Name()].first;
+    QuantizeInput(g, transpose_op, transpose_in, "X", input_scale,
+                  is_input_unsigned);
+
+    auto output_scale = scales[transpose_out->Name()].second.data<double>()[0];
+    bool is_output_unsigned = scales[transpose_out->Name()].first;
+    DequantizeOutput(g, transpose_op, transpose_out, "Out", output_scale,
+                     is_output_unsigned);
+
+    std::cout << transpose_op->id() << std::endl;
+    ++quantize_transpose_count;
+  };
+
+  gpd(graph, handler);
+  AddStatis(quantize_transpose_count);
+
+  PrettyLogDetail("---    quantized %d transpose2 ops",
+                  quantize_transpose_count);
+}
+
 std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
     std::unique_ptr<ir::Graph> graph) const {
   VLOG(3) << "Quantizing the graph.";
@@ -227,6 +272,7 @@ std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
   QuantizeConv(graph.get(), false /* with_residual_data */);
   QuantizeConv(graph.get(), true /* with_residual_data */);
   QuantizePool(graph.get());
+  QuantizeTranspose2(graph.get());
 
   return graph;
 }
