@@ -22,10 +22,14 @@ QuantizerConfig::QuantizerConfig() {
   rules_["conv2d"]["Filter"] = ScaleAlgo::MAX_CH;
   rules_["conv2d"]["Bias"] = ScaleAlgo::NONE;  // do not compute scale
   rules_["conv2d"]["ResidualData"] = ScaleAlgo::KL;
-  rules_["conv2d"]["Output"] = ScaleAlgo::KL;  // do not compute scale
+  rules_["conv2d"]["Output"] = ScaleAlgo::KL;
 
   rules_["pool2d"]["X"] = ScaleAlgo::KL;
-  rules_["pool2d"]["Out"] = ScaleAlgo::KL;  // do not compute scale
+  rules_["pool2d"]["Out"] = ScaleAlgo::KL;
+
+  rules_["transpose2"]["X"] = ScaleAlgo::KL;
+  rules_["transpose2"]["Out"] = ScaleAlgo::KL;
+  rules_["transpose2"]["XShape"] = ScaleAlgo::NONE;  // do not compute scale
 }
 
 ScaleAlgo QuantizerConfig::scale_algo(const std::string& op_type_name,
