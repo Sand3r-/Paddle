@@ -76,7 +76,7 @@ class InferenceTranspiler(object):
             self._fuse_conv_relu_mkldnn(
                 program)  # ResNet residual block merging
             self._fuse_bn_relu_mkldnn(program)
-            self._fuse_mul_add_mkldnn(program)
+            # self._fuse_mul_add_mkldnn(program)
 
         self._is_test_pass(program)
 

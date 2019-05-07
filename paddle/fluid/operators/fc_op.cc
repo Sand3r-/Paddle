@@ -33,7 +33,7 @@ void FCOp::InferShape(framework::InferShapeContext* ctx) const {
 
   bool use_mkldnn = ctx->Attrs().Get<bool>("use_mkldnn");
   if (ctx->HasInput("Bias")) {
-    const int output_w_axis = !use_mkldnn;  // Default W format=IO, MKL-DNN=OI
+    const int output_w_axis = 1;  // Default W format=IO, MKL-DNN=OI
     auto bias_dims = ctx->GetInputDim("Bias");
     if (bias_dims.size() == 2) {
       PADDLE_ENFORCE_EQ(bias_dims[0], 1, "The shape of Bias must be [1, dim].");

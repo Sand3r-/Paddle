@@ -52,8 +52,8 @@ inline void FCOutputSize(const framework::DDim& in_dims,
                          const framework::DDim& w_dims,
                          std::vector<int64_t>& out_dims,  // NOLINT
                          int in_num_col_dims, bool use_mkldnn = false) {
-  int input_w_axis = use_mkldnn;    // MKL-DNN weight format is in oi, while
-  int output_w_axis = !use_mkldnn;  // the reference weight format is io.
+  int input_w_axis = 0;    // MKL-DNN weight format is in oi, while
+  int output_w_axis = 1;  // the reference weight format is io.
   auto in_mat_dims = framework::flatten_to_2d(in_dims, in_num_col_dims);
   PADDLE_ENFORCE_EQ(
       in_mat_dims[1], w_dims[input_w_axis],
