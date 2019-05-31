@@ -21,6 +21,8 @@ namespace operators {
 
 using Tensor = framework::Tensor;
 
+enum { kFCMKLDNNFP32 = 1, kFCMKLDNNINT8 = 2 };
+
 class FCOp : public framework::OperatorWithKernel {
  public:
   using framework::OperatorWithKernel::OperatorWithKernel;
