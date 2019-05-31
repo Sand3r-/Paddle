@@ -34,6 +34,11 @@ MkldnnQuantizerConfig::MkldnnQuantizerConfig() {
   rules_["prior_box"]["Image"] = ScaleAlgo::NONE;
   rules_["prior_box"]["Boxes"] = ScaleAlgo::NONE;
   rules_["prior_box"]["Variances"] = ScaleAlgo::NONE;
+  
+  rules_["fc"]["Input"] = ScaleAlgo::KL;
+  rules_["fc"]["W"] = ScaleAlgo::MAX_CH;
+  rules_["fc"]["Bias"] = ScaleAlgo::NONE;  // do not compute scale
+  rules_["fc"]["Out"] = ScaleAlgo::KL;
 }
 
 ScaleAlgo MkldnnQuantizerConfig::scale_algo(
