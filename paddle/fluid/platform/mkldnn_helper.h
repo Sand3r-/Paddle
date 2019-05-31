@@ -15,6 +15,7 @@ limitations under the License. */
 
 #include <mkldnn.h>
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 #include "paddle/fluid/framework/operator.h"
@@ -87,6 +88,21 @@ mkldnn::memory::data_type MKLDNNGetDataType() {
 template <>
 inline mkldnn::memory::data_type MKLDNNGetDataType<float>() {
   return mkldnn::memory::f32;
+}
+
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<int32_t>() {
+  return mkldnn::memory::s32;
+}
+
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<uint8_t>() {
+  return mkldnn::memory::u8;
+}
+
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<int8_t>() {
+  return mkldnn::memory::s8;
 }
 
 inline void Reorder(const mkldnn::memory& src, const mkldnn::memory& dst) {
