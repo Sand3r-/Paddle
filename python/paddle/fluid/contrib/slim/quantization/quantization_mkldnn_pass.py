@@ -351,6 +351,9 @@ class TransformThroughFP32Pass(object):
                 input_name = op.input("X")[0]
                 scale_names = op.input("Scale")
                 max_range = op.op().attr("max_range")
+                scale = self._load_param(self._scope, scale_names[0])
+                lod_tensor = _convert_scale2tensor(scale.astype(np.float64))
+                self.VarQuantScales[input_name] = (False, lod_tensor)
                 self.WeightScales[input_name] = max_range
 
     def _load_param(self, scope, param_name):
@@ -442,6 +445,15 @@ class TransformThroughFP32Pass(object):
         # Convert int8 range weights to fp32 range weights
         scales = self.WeightScales[output_name]
         weight = self._load_param(self._scope, weight_name)
+
+        # Save weights to file
+        np.savetxt(
+            "py_weights/" + weight_name,
+            weight.ravel(),
+            fmt='%d',
+            delimiter='\n')
+        print(weight_name + ' ' + str(scales / self.s8_max))
+
         w_fp32 = np.divide(np.multiply(weight, self.s8_max), scales)
         w_fp32 = w_fp32.reshape(weight.shape)
         self._restore_var(weight_name, w_fp32)
@@ -463,8 +475,8 @@ class TransformThroughFP32Pass(object):
         graph = self._apply_pass(graph, 'mkldnn_placement_pass',
                                  ['mkldnn_enabled_op_types'], [set()])
         graph = self._apply_pass(graph, 'depthwise_conv_mkldnn_pass')
-        graph = self._apply_pass(graph, 'conv_bn_fuse_pass')
-        graph = self._apply_pass(graph, 'conv_eltwiseadd_bn_fuse_pass')
+        # graph = self._apply_pass(graph, 'conv_bn_fuse_pass')
+        # graph = self._apply_pass(graph, 'conv_eltwiseadd_bn_fuse_pass')
         graph = self._apply_pass(graph, 'conv_bias_mkldnn_fuse_pass')
         graph = self._apply_pass(graph, 'conv_elementwise_add_mkldnn_fuse_pass')
         graph = self._apply_pass(graph, 'conv_relu_mkldnn_fuse_pass')
@@ -517,9 +529,9 @@ class TransformThroughFP32Pass(object):
                     weight_var_name = op.input(w_name)[0]
                     weights = np.array(
                         self._load_param(self._scope, weight_var_name))
-                    scales = 1.0 / np.amax(
-                        np.abs(weights.reshape(weights.shape[0], -1)), axis=1)
-                    #  scales = np.array(1.0 / np.amax(np.abs(weights)))
+                    # scales = 1.0 / np.amax(
+                    #     np.abs(weights.reshape(weights.shape[0], -1)), axis=1)
+                    scales = np.array(1.0 / np.amax(np.abs(weights)))
 
                     lod_tensor = _convert_scale2tensor(
                         scales.astype(np.float64))

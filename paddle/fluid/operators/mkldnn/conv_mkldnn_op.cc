@@ -12,6 +12,8 @@
    See the License for the specific language governing permissions and
    limitations under the License. */
 
+#include <mkldnn/include/mkldnn_debug.h>
+#include <fstream>
 #include <unordered_map>
 #include "paddle/fluid/framework/data_layout_transform.h"
 #include "paddle/fluid/memory/malloc.h"
@@ -28,6 +30,75 @@ using mkldnn::reorder;
 using mkldnn::stream;
 using platform::to_void_cast;
 using platform::GetMKLDNNFormat;
+
+template <typename T>
+static void SaveToFile(std::string filename, T* data, size_t size) {
+  std::ofstream datafile("/home/mgallus/src/Sander/Paddle/qat/cpp_weights/" +
+                         filename + ".txt");
+  if (datafile.is_open()) {
+    std::cout << "saving " << filename << std::endl;
+    for (size_t count = 0; count < size; count++) {
+      datafile << std::to_string(data[count]) << "\n";
+    }
+    datafile.close();
+  }
+}
+
+template <typename T>
+static void SaveToFile(std::string filename, const mkldnn::memory& mem) {
+  //   T* data = (T*)mem.get_data_handle();
+  auto desc = mem.get_primitive_desc().desc().data;
+  int ndims = desc.ndims;
+  auto dims = desc.dims;
+  auto strides = desc.layout_desc.blocking.strides[0];
+  auto format = mkldnn_fmt2str(desc.format);
+
+  size_t size = 1;
+  for (int i = 0; i < ndims; i++) {
+    size *= dims[i];
+  }
+  // auto engine = mem.get_primitive_desc().get_engine();
+  // // std::vector<int> dims2 = {dims[0], dims[1], dims[2], dims[3]};
+  // // memory::desc d_dst = platform::MKLDNNMemDesc(
+  // //       dims2, platform::MKLDNNGetDataType<T>(), memory::format::oihw);
+  // memory::desc d_dst = mem.get_primitive_desc().desc();
+  // d_dst.data.format = (mkldnn_memory_format_t)memory::format::nchw;
+  // std::cout << "after memory desc copy" << std::endl;
+  // memory::primitive_desc pd_dst = memory::primitive_desc(d_dst, engine);
+  // std::cout << "after prim desc memory create" << std::endl;
+  // mkldnn::memory dst = mkldnn::memory(pd_dst);
+  // std::cout << "after memory create" << std::endl;
+  // try {
+  //   platform::Reorder(mem, dst); }
+  //   catch(std::exception& e) {
+  //     std::cout << e.what() << std::endl;
+  //   }
+
+  T* data = (T*)mem.get_data_handle();
+  std::ofstream datafile("/home/mgallus/src/Sander/Paddle/qat/cpp_weights/" +
+                         filename + ".txt");
+  if (datafile.is_open()) {
+    for (size_t count = 0; count < size; count++) {
+      datafile << std::to_string(data[count]) << "\n";
+    }
+    datafile.close();
+  }
+
+  std::ofstream layout_file("/home/mgallus/src/Sander/Paddle/qat/cpp_weights/" +
+                            filename + ".layout.txt");
+  if (layout_file.is_open()) {
+    layout_file << "dims num = " << ndims << "\n";
+    layout_file << "dims = ";
+    for (int i = 0; i < ndims; i++) layout_file << dims[i] << ' ';
+    layout_file << '\n';
+    layout_file << "strides = ";
+    for (int i = 0; i < ndims; i++) layout_file << strides[i] << ' ';
+    layout_file << '\n';
+    layout_file << "format" << format;
+
+    layout_file.close();
+  }
+}
 
 inline void GetWeightsTz(std::vector<int>& weights_tz, int groups,  // NOLINT
                          bool is_conv3d) {
@@ -315,6 +386,23 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     output->set_layout(DataLayout::kMKLDNN);
     output->set_format(GetMKLDNNFormat(*dst_memory_p));
   }
+
+  mkldnn::memory Reorder(const memory& src_mem,
+                         const memory::primitive_desc& dst_pd,
+                         const std::vector<float>& scale_data, int mask) const {
+    mkldnn::memory dst_mem = mkldnn::memory(dst_pd);
+    mkldnn::primitive_attr attributes;
+    attributes.set_output_scales(mask, scale_data);
+    auto reorder =
+        mkldnn::reorder(mkldnn::reorder::primitive_desc(
+                            src_mem.get_primitive_desc(), dst_pd, attributes),
+                        src_mem, dst_mem);
+
+    stream(stream::kind::eager).submit({reorder}).wait();
+
+    return dst_mem;
+  }
+
   template <typename T_out>
   void ComputeINT8(const paddle::framework::ExecutionContext& ctx) const {
     const bool is_test = ctx.Attr<bool>("is_test");
@@ -345,6 +433,7 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
       PADDLE_ENFORCE(bias->dims().size() == 1,
                      "Bias must only have 1 dimension, i.e. X");
     }
+    std::shared_ptr<mkldnn::memory> weights_memory_p;
 
     std::vector<int> strides = ctx.Attr<std::vector<int>>("strides");
     std::vector<int> paddings = ctx.Attr<std::vector<int>>("paddings");
@@ -472,7 +561,7 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
       auto src_md =
           platform::MKLDNNMemDesc(src_tz, src_dt, chosen_memory_format);
       auto weights_md = platform::MKLDNNMemDesc(
-          weights_tz, memory::data_type::s8, chosen_memory_format);
+          weights_tz, memory::data_type::s8, memory::format::any);
       auto dst_md = platform::MKLDNNMemDesc(
           dst_tz, platform::MKLDNNGetDataType<T_out>(), chosen_memory_format);
 
@@ -507,12 +596,25 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
       src_memory_p =
           handler->AcquireSrcMemoryFromPrimitive(user_src_memory_p, pipeline);
 
-      std::shared_ptr<mkldnn::memory> weights_memory_p;
       int mask_reorder =
           is_multi_channel ? ((g != 1) ? (1 << 1) + (1 << 0) : 1 << 0) : 0;
       weights_memory_p = handler->AcquireWeightsMemoryFromPrimitive(
           user_weights_memory_p, pipeline, is_test, true, scale_weights_data,
           mask_reorder);
+
+      // Quantize the weights to hwio here.
+      auto quant_desc = user_weights_memory_p->get_primitive_desc().desc();
+      quant_desc.data.data_type =
+          (mkldnn_data_type_t)platform::MKLDNNGetDataType<int8_t>();
+      quant_desc.data.format = (mkldnn_memory_format_t)memory::format::oihw;
+      auto dst = Reorder(*user_weights_memory_p, {quant_desc, mkldnn_engine},
+                         scale_weights_data, mask_reorder);
+      auto name = ctx.op().Input("Filter");
+      std::cout << name << std::endl;
+      std::cout << "scales: " << std::endl;
+      for (int i = 0; i < scale_weights_data.size(); i++)
+        std::cout << scale_weights_data[i] << std::endl;
+      SaveToFile<int8_t>(name, dst);
 
       if (fuse_residual_conn) {
         auto residual_param = ctx.Input<Tensor>("ResidualData");

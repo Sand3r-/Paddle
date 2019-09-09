@@ -344,6 +344,8 @@ AnalysisPredictor::MkldnnQuantizer::GetMaxChScalingFactor(
     scale_ptr[i] = 1.0 / max_abs;
   }
 
+  std::cout << "I have quantized the weights as channelwise" << std::endl;
+
   return std::make_pair(is_unsigned, scale_tensor);
 }
 
