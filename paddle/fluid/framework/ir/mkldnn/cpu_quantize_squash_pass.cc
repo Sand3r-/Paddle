@@ -200,7 +200,7 @@ void CPUQuantizeSquashPass::ApplyImpl(ir::Graph* graph) const {
   FindNodesToKeep(graph, &nodes_keep_counter);
   DequantQuantSquash(graph, &nodes_keep_counter);
   ConvRequantSquash(graph);
-  ConvDequantSquash(graph);
+  // ConvDequantSquash(graph);
 }
 
 }  // namespace ir

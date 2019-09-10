@@ -349,9 +349,21 @@ class TransformThroughFP32Pass(object):
 
             if op.name() in self.fake_dequantize_types:
                 input_name = op.input("X")[0]
-                scale_names = op.input("Scale")
+                scale_name = op.input("Scale")[0]
                 max_range = op.op().attr("max_range")
+                
+                scale = np.array(1.0 / self._load_param(
+                    self._scope, scale_name)[0]).astype(np.float64)
+                lod_tensor = _convert_scale2tensor(scale)
+                self.VarQuantScales[input_name] = (False, lod_tensor)
+
                 self.WeightScales[input_name] = max_range
+            
+            if op.name() in self._pool_ops:
+                input_name = op.input("X")[0]
+                output_name = op.output("Out")[0]
+                if output_name in self.VarQuantScales:
+                    self.VarQuantScales[input_name] = self.VarQuantScales[output_name]
 
     def _load_param(self, scope, param_name):
         return np.array(scope.find_var(param_name).get_tensor())
