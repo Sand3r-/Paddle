@@ -413,16 +413,8 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     mkldnn::memory::data_type src_dt =
         paddle::framework::ToMKLDNNDataType(input->type());
 
-<<<<<<< HEAD
-    // Get unique name for storing MKLDNN primitives
-    const std::string key = platform::CreateKey(
-        src_tz, weights_tz, strides, paddings, dilations, groups, src_dt,
-        input->format(), fuse_activation, fuse_residual_conn,
-        ctx.op().Input("Input") + ctx.op().Input("Filter"));
-=======
     std::string key = platform::CreateKey(
         src_tz, src_dt, ctx.op().Input("Input") + ctx.op().Input("Filter"));
->>>>>>> ad7c5b72ee... - Flushing mkl-dnn cache
 
     const std::string key_conv_pd = key + "@conv_pd";
 
