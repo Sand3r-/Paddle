@@ -42,6 +42,8 @@ class ReduceKernel : public framework::OpKernel<T> {
     auto dims = context.Attr<std::vector<int>>("dim");
     bool keep_dim = context.Attr<bool>("keep_dim");
 
+    std::cout << "I'm here " << std::endl;
+
     if (reduce_all) {
       // Flatten and reduce 1-D tensor
       auto x = EigenVector<T>::Flatten(*input);
@@ -71,6 +73,16 @@ class ReduceKernel : public framework::OpKernel<T> {
       HANDLE_DIM(3, 1);
       HANDLE_DIM(2, 1);
       HANDLE_DIM(1, 1);
+    }
+    auto* input_data = input->data<T>();
+    auto* output_data = output->data<T>();
+    std::cout.precision(17);
+    for (int i = 0; i < input->numel(); i++) {
+      std::cout << std::fixed << input_data[i] << std::endl;
+    }
+    std::cout << "-----------" << std::endl;
+    for (int i = 0; i < output->numel(); i++) {
+      std::cout << std::fixed << output_data[i] << std::endl;
     }
   }
 };
