@@ -101,8 +101,9 @@ class FakeQAT2MkldnnINT8KernelPass(object):
             if op_node.name() in self._dequantize_type:
                 input_name = op_node.input("X")[0]
                 scale_name = op_node.input("Scale")[0]
-                self._in_scale[input_name] = self._load_param(self._scope,
-                                                              scale_name)[0]
+                # self._in_scale[input_name] = self._load_param(self._scope,
+                #   scale_name)[0]
+                self._in_scale[input_name] = np.array([1.0])
                 self._max_range[input_name] = op_node.op().attr("max_range")
                 self._new_output[input_name] = op_node.output("Out")[0]
 
@@ -111,8 +112,9 @@ class FakeQAT2MkldnnINT8KernelPass(object):
                 attrs = op_node.op().attr_names()
                 input_name = op_node.input("X")[0]
                 scale_name = op_node.input("InScale")[0]
-                self._in_scale[input_name] = self._load_param(self._scope,
-                                                              scale_name)[0]
+                # self._in_scale[input_name] = self._load_param(self._scope,
+                #                                               scale_name)[0]
+                self._in_scale[input_name] = np.array([1.0])
                 #  self._max_range[input_name] = op_node.op().attr("max_range")
                 self._new_output[input_name] = op_node.output("Out")[0]
 
@@ -230,8 +232,9 @@ class FakeQAT2MkldnnINT8KernelPass(object):
                                                   op_node.input("X")[0])
         output_var_node = graph._find_node_by_name(op_node.outputs,
                                                    op_node.output("Out")[0])
-        scale_in = self._s8_max / self._load_param(
-            self._scope, op_node.input("InScale")[0])[0]
+        # scale_in = self._s8_max / self._load_param(
+        # self._scope, op_node.input("InScale")[0])[0]
+        scale_in = self._s8_max / 1.0
         quant_op_node = graph.create_op_node(
             op_type='quantize',
             attrs={
@@ -298,11 +301,13 @@ class FakeQAT2MkldnnINT8PerfPass(object):
         self._quantize_types = [
             'fake_quantize_moving_average_abs_max',
             'fake_quantize_range_abs_max',
-            'fake_quantize_dequantize_moving_average_abs_max'
+            'fake_quantize_dequantize_moving_average_abs_max',
+            'fake_quantize_abs_max'
         ]
         self._fake_quantize_types = [
             'fake_quantize_moving_average_abs_max',
-            'fake_quantize_dequantize_moving_average_abs_max'
+            'fake_quantize_dequantize_moving_average_abs_max',
+            'fake_quantize_abs_max'
         ]
         self._fake_dequantize_types = ['fake_dequantize_max_abs']
         self._conv_ops = ['conv2d', 'depthwise_conv2d']
@@ -343,11 +348,14 @@ class FakeQAT2MkldnnINT8PerfPass(object):
                     bit_length)
 
                 input_name = op.input("X")[0]
-                scale_name = op.input("InScale")[0]
+                scale_name = op.output("OutScale")[0]
+                print(scale_name)
                 # Gather new weights scale after folding batchnorm in convolution
-                scale = np.array(1.0 / self._load_param(
-                    self._scope, scale_name)[0]).astype(np.float64)
-                lod_tensor = self._convert_scale2tensor(scale)
+                # scale = np.array(1.0 / self._load_param(
+                #     self._scope, scale_name)[0]).astype(np.float64)
+                # lod_tensor = self._convert_scale2tensor(scale)
+                lod_tensor = self._convert_scale2tensor(
+                    np.array([1]).astype(np.float64))
                 use_unsigned_int = False
                 self._var_quant_scales[input_name] = (use_unsigned_int,
                                                       lod_tensor)
