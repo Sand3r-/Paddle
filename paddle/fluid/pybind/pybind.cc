@@ -994,7 +994,10 @@ All parameter, weight, gradient are variables in Paddle.
            R"DOC(
            Delete all sub-scopes of the current scope.
            )DOC")
-      .def("_kids", &Scope::kids);
+      .def("_kids", &Scope::kids)
+      .def("_debug", [](Scope &self) -> std::string {
+        return GenScopeTreeDebugInfo(&self);
+      });
 
   m.def("Scope",
         []() -> Scope * {
