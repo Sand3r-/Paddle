@@ -270,7 +270,7 @@ void CPUQuantizePass::QuantizeFc(Graph* graph) const {
     // get scales calculated after warmup, they scale variables to MAX=1.0
     auto scales = Get<VarQuantScale>("quant_var_scales");
 
-    auto input_scale = scales[input->Name()].second.data<double>()[0];
+    auto input_scale = 2.0;
     bool is_input_unsigned = scales[input->Name()].first;
     QuantizeInput(g, fc, input, "Input", input_scale, is_input_unsigned,
                   "Scale_in");
@@ -285,7 +285,7 @@ void CPUQuantizePass::QuantizeFc(Graph* graph) const {
 
     fc->Op()->SetAttr("Scale_weights", filter_scale);
 
-    auto output_scale = scales[output->Name()].second.data<double>()[0];
+    auto output_scale = 2.0;
     bool is_output_unsigned = scales[output->Name()].first;
     DequantizeOutput(g, fc, output, "Out", output_scale, is_output_unsigned,
                      "Scale_out");
@@ -450,13 +450,13 @@ void CPUQuantizePass::QuantizeTranspose(Graph* graph) const {
 
     // get scales calculated after warmup, they scale variables to MAX=1.0
     auto scales = Get<VarQuantScale>("quant_var_scales");
-    auto input_scale = scales[transpose_in->Name()].second.data<double>()[0];
-    bool is_input_unsigned = scales[transpose_in->Name()].first;
+    auto input_scale = 2.0;
+    bool is_input_unsigned = false;
     QuantizeInput(g, transpose_op, transpose_in, "X", input_scale,
                   is_input_unsigned);
 
-    auto output_scale = scales[transpose_out->Name()].second.data<double>()[0];
-    bool is_output_unsigned = scales[transpose_out->Name()].first;
+    auto output_scale = 2.0;
+    bool is_output_unsigned = false;
     DequantizeOutput(g, transpose_op, transpose_out, "Out", output_scale,
                      is_output_unsigned);
 
@@ -503,13 +503,14 @@ void CPUQuantizePass::QuantizeReshape(Graph* graph) const {
 
     // get scales calculated after warmup, they scale variables to MAX=1.0
     auto scales = Get<VarQuantScale>("quant_var_scales");
-    auto input_scale = scales[reshape_in->Name()].second.data<double>()[0];
-    bool is_input_unsigned = scales[reshape_in->Name()].first;
+    // bool is_scale_avail = scales.find(reshape_in->Name()) != scales.end();
+    auto input_scale = 2.0;
+    bool is_input_unsigned = false;
     QuantizeInput(g, reshape_op, reshape_in, "X", input_scale,
                   is_input_unsigned);
 
-    auto output_scale = scales[reshape_out->Name()].second.data<double>()[0];
-    bool is_output_unsigned = scales[reshape_out->Name()].first;
+    auto output_scale = 2.0;
+    bool is_output_unsigned = false;
     DequantizeOutput(g, reshape_op, reshape_out, "Out", output_scale,
                      is_output_unsigned);
 
