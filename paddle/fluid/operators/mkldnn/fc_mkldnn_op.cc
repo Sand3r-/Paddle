@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
 
+#include <mkldnn/include/mkldnn_debug.h>
 #include <mkldnn/include/mkldnn_types.h>
 #include <memory>
 #include "paddle/fluid/framework/tensor.h"
@@ -84,7 +85,11 @@ class FCPrimitiveFactory {
             "DNNL FC doesn't support input dims different than 2, 3, 4."));
         break;
     }
+    VLOG(1) << mkldnn_fmt_tag2str(
+        (mkldnn_format_tag_t)GetMKLDNNFormat(fc_prim_desc->src_desc()));
     input_ = CreateMemory<T_in>(fc_prim_desc->src_desc(), input);
+    VLOG(1) << mkldnn_fmt_tag2str(
+        (mkldnn_format_tag_t)GetMKLDNNFormat(input_->get_desc()));
     // Update weights format inside of its memory
     weights_ = Reorder(usr_weights_desc, usr_weights_desc,
                        weights_->get_data_handle());
@@ -103,6 +108,24 @@ class FCPrimitiveFactory {
     // Return MKL-DNN primitive ready to be fed into pipeline and executed
     fc_ = inner_product_forward(*fc_prim_desc);
     this->Execute();
+
+    char* num_str = getenv("OUT_NUM");
+    unsigned int num = num_str == nullptr ? 10 : std::stoul(num_str);
+
+    input->Print<T_in>(engine_, ctx.InputName("Input"));
+
+    {
+      const T_w* data = (T_w*)weights_->get_data_handle();
+      std::string name = ctx.InputName("W");
+      VLOG(1) << name;
+      for (unsigned int i = 0; i < num; i++) VLOG(1) << std::to_string(data[i]);
+    }
+    VLOG(1) << "Weights strides";
+    VLOG(1) << weights_->get_desc().data.format_desc.blocking.strides[0];
+    VLOG(1) << weights_->get_desc().data.format_desc.blocking.strides[1];
+    VLOG(1) << weights_->get_desc().data.format_desc.blocking.strides[2];
+
+    output->Print<T_out>(engine_, ctx.OutputName("Out"));
   }
 
   void Execute() {
@@ -131,7 +154,9 @@ class FCPrimitiveFactory {
     if (out->format() == MKLDNNMemoryFormat::undef) {
       MKLDNNMemoryFormat format;
       auto data_type = input_->get_desc().data.data_type;
-      if (data_type == mkldnn_f32)
+      (void)data_type;
+      // if (data_type == mkldnn_f32)
+      if (true)
         format = MKLDNNMemoryFormat::nchw;
       else
         format = MKLDNNMemoryFormat::nhwc;
@@ -168,10 +193,13 @@ class FCPrimitiveFactory {
       const LoDTensor* input, const Tensor* weights, const Tensor* bias,
       LoDTensor* output, const ExecutionContext& ctx) {
     auto input_dims = framework::vectorize(input->dims());
-    std::vector<int64_t> new_input_dims = {input_dims[0] * input_dims[1], 1,
-                                           input_dims[2]};
-    auto src_desc = CreateMemDescriptor<T_in>(new_input_dims, input->format());
-
+    std::vector<int64_t> new_input_dims = {input_dims[0] * input_dims[1],
+                                           input_dims[2], 1};
+    memory::desc src_desc =
+        CreateMemDescriptor<T_in>(new_input_dims, input->format());
+    VLOG(1) << mkldnn_fmt_tag2str((mkldnn_format_tag_t)input->format());
+    VLOG(1) << mkldnn_fmt_tag2str(
+        (mkldnn_format_tag_t)GetMKLDNNFormat(src_desc));
     auto weight_dims = Get3DWeightDimsForDNNL(weights);
     auto weights_desc =
         CreateMemDescriptor<T_w>(weight_dims, MKLDNNMemoryFormat::any);
@@ -187,7 +215,7 @@ class FCPrimitiveFactory {
 
   std::vector<int64_t> Get3DWeightDimsForDNNL(const Tensor* weights) {
     auto paddle_w_dims = framework::vectorize(weights->dims());
-    return {paddle_w_dims[1], 1, paddle_w_dims[0]};
+    return {paddle_w_dims[1], paddle_w_dims[0], 1};
   }
 
   memory::desc Create3DUserWeightsDesc(const Tensor* weights) {
@@ -388,9 +416,13 @@ class FCPrimitiveFactory {
       const mkldnn::memory::desc& bias_desc,
       const mkldnn::memory::desc& dst_desc,
       const mkldnn::primitive_attr& attrs) {
+    VLOG(1) << mkldnn_fmt_tag2str(
+        (mkldnn_format_tag_t)GetMKLDNNFormat(input_desc));
     auto fc_desc =
         inner_product_forward::desc(prop_kind::forward_scoring, input_desc,
                                     weights_desc, bias_desc, dst_desc);
+    VLOG(1) << mkldnn_fmt_tag2str(
+        (mkldnn_format_tag_t)GetMKLDNNFormat(fc_desc.data.src_desc));
 
     return inner_product_forward::primitive_desc(fc_desc, attrs, engine_);
   }
@@ -406,9 +438,11 @@ class FCPrimitiveFactory {
         output->mutable_data<T_out>(ctx.GetPlace(), buffer_size);
     memory dst_mem(dst_desc, engine_, to_void_cast<T_out>(output_data));
 
-    MKLDNNMemoryFormat format;
+    MKLDNNMemoryFormat format;  // = ctx.Input("Input").format();
     auto data_type = input_->get_desc().data.data_type;
-    if (data_type == mkldnn_f32)
+    (void)data_type;
+    // if (data_type == mkldnn_f32)
+    if (true)
       format = MKLDNNMemoryFormat::nchw;
     else
       format = MKLDNNMemoryFormat::nhwc;

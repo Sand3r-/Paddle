@@ -17,6 +17,7 @@ limitations under the License. */
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <mkldnn/include/mkldnn.hpp>
 #include <typeindex>
 #include <utility>
 #include <vector>
@@ -30,6 +31,65 @@ limitations under the License. */
 
 namespace paddle {
 
+namespace platformx {
+inline mkldnn::memory::desc MKLDNNMemDesc(const std::vector<int64_t>& dims,
+                                          mkldnn::memory::data_type data_type,
+                                          mkldnn::memory::format_tag format) {
+  return mkldnn::memory::desc({dims}, data_type, format);
+}
+
+inline mkldnn::memory::format_tag MKLDNNFormatForSize(
+    size_t dims_size, mkldnn::memory::format_tag data_format) {
+  if (dims_size == 1) {
+    return mkldnn::memory::format_tag::x;
+  } else if (dims_size == 2) {
+    return mkldnn::memory::format_tag::nc;
+  } else if (dims_size == 3) {
+    if (data_format == mkldnn::memory::format_tag::nchw) {
+      return mkldnn::memory::format_tag::ncw;
+    } else if (data_format == mkldnn::memory::format_tag::nhwc) {
+      return mkldnn::memory::format_tag::nwc;
+    }
+  } else if (dims_size == 5) {
+    if (data_format == mkldnn::memory::format_tag::nchw) {
+      return mkldnn::memory::format_tag::ncdhw;
+    } else if (data_format == mkldnn::memory::format_tag::nhwc) {
+      return mkldnn::memory::format_tag::ndhwc;
+    }
+  }
+  return data_format;
+}
+
+inline void Reorder(mkldnn::memory& src, mkldnn::memory& dst,
+                    const mkldnn::engine& engine) {
+  auto reorder_prim = mkldnn::reorder(src, dst);
+  mkldnn::stream astream(engine);
+  reorder_prim.execute(astream, src, dst);
+}
+
+template <typename Type>
+mkldnn::memory::data_type MKLDNNGetDataType() {
+  return mkldnn::memory::data_type::undef;
+}
+
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<float>() {
+  return mkldnn::memory::data_type::f32;
+}
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<int32_t>() {
+  return mkldnn::memory::data_type::s32;
+}
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<int8_t>() {
+  return mkldnn::memory::data_type::s8;
+}
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<uint8_t>() {
+  return mkldnn::memory::data_type::u8;
+}
+}
+
 namespace framework {
 
 class LoDTensor;
@@ -42,6 +102,34 @@ class Tensor {
 
   inline void set_format(const mkldnn::memory::format_tag format) {
     format_ = format;
+  }
+
+  template <typename T>
+  void Print(const mkldnn::engine& engine,
+             const std::string& tensor_name) const {
+    std::cout << tensor_name << std::endl;
+    const T* data = this->data<T>();
+    std::vector<int64_t> src_tz = paddle::framework::vectorize(dims());
+
+    auto src_md = platformx::MKLDNNMemDesc(
+        {src_tz}, platformx::MKLDNNGetDataType<T>(), format_);
+    mkldnn::memory src_mem = mkldnn::memory(src_md, engine, (T*)data);
+
+    auto dst_md = platformx::MKLDNNMemDesc(
+        {src_tz}, platformx::MKLDNNGetDataType<T>(),
+        platformx::MKLDNNFormatForSize(src_tz.size(),
+                                       mkldnn::memory::format_tag::nchw));
+    mkldnn::memory dst_mem = mkldnn::memory(dst_md, engine);
+
+    platformx::Reorder(src_mem, dst_mem, engine);
+    data = (T*)dst_mem.get_data_handle();
+
+    int output_num = 10;
+    if (const char* env_p = std::getenv("OUT_NUMB")) output_num = atoi(env_p);
+
+    for (int i = 0; i < output_num; i++) {
+      VLOG(1) << std::to_string(data[i]) << std::endl;
+    }
   }
 
  protected:

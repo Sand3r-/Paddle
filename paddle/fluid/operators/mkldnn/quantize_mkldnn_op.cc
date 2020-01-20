@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 
 #include "mkldnn.hpp"
+#include "mkldnn_debug.h"
 #include "paddle/fluid/framework/tensor.h"
 #include "paddle/fluid/operators/quantize_op.h"
 #include "paddle/fluid/platform/mkldnn_helper.h"
@@ -104,6 +105,7 @@ class QuantOpKernel : public framework::OpKernel<T> {
     astream.wait();
 
     output->set_layout(DataLayout::kMKLDNN);
+    auto format = GetMKLDNNFormat(*dst_memory);
     output->set_format(GetMKLDNNFormat(*dst_memory));
   }
 };

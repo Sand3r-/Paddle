@@ -379,6 +379,14 @@ class FakeQAT2MkldnnINT8PerfPass(object):
                 if input_name in self._var_quant_scales:
                     self._var_quant_scales[
                         output_name] = self._var_quant_scales[input_name]
+        for op in graph.all_op_nodes():
+            if op.name() in self._fc_ops:
+                input_name = op.input("Input")[0]
+                output_name = op.output("Out")[0]
+                if input_name in self._var_quant_scales and \
+                    output_name not in self._var_quant_scales:
+                    self._var_quant_scales[
+                        output_name] = self._var_quant_scales[input_name]
         return graph
 
     def _load_param(self, scope, param_name):
@@ -390,15 +398,13 @@ class FakeQAT2MkldnnINT8PerfPass(object):
                 op_out = graph._find_node_by_name(op.outputs,
                                                   op.output("Out")[0])
                 next_op = op_out.outputs[0]
-                if next_op.name() not in self._mul_ops:
-                    self._remove_fake_quantize(graph, op)
+                self._remove_fake_quantize(graph, op)
 
         for op in graph.all_op_nodes():
             if op.name() in self._fake_dequantize_types:
                 op_in = graph._find_node_by_name(op.inputs, op.input("X")[0])
                 prev_op = op_in.inputs[0]
-                if prev_op.name() not in self._mul_ops:
-                    self._remove_fake_dequantize(graph, op)
+                self._remove_fake_dequantize(graph, op)
         return graph
 
     def _remove_fake_quantize(self, graph, op):
@@ -444,6 +450,8 @@ class FakeQAT2MkldnnINT8PerfPass(object):
         for op in graph.all_op_nodes():
             if op.name() in self._conv_ops:
                 self._dequantize_conv_weights(graph, op)
+            elif op.name() in self._mul_ops:
+                self._dequantize_mul_weights(graph, op)
         return graph
 
     def _dequantize_conv_weights(self, graph, op_node):
@@ -461,6 +469,8 @@ class FakeQAT2MkldnnINT8PerfPass(object):
         output_name = op_node.output("Out")[0]
         scales = self._weight_scales[output_name]
         weight = self._load_param(self._scope, weight_name)
+        # print(weight_name)
+        # print(np.amax(weight))
         w_fp32 = np.divide(np.multiply(weight, self._s8_max), scales)
         w_fp32 = w_fp32.reshape(weight.shape)
         self._restore_var(weight_name, w_fp32)
@@ -472,13 +482,15 @@ class FakeQAT2MkldnnINT8PerfPass(object):
     def _optimize_fp32_graph(self, graph):
         graph = self._apply_pass(graph, 'mkldnn_placement_pass',
                                  ['mkldnn_enabled_op_types'], [set()])
-        graph = self._apply_pass(graph, 'depthwise_conv_mkldnn_pass')
-        graph = self._apply_pass(graph, 'conv_bn_fuse_pass')
-        graph = self._apply_pass(graph, 'conv_eltwiseadd_bn_fuse_pass')
-        graph = self._apply_pass(graph, 'conv_bias_mkldnn_fuse_pass')
-        graph = self._apply_pass(graph, 'conv_elementwise_add_mkldnn_fuse_pass')
-        graph = self._apply_pass(graph, 'conv_relu_mkldnn_fuse_pass')
-        graph = self._apply_pass(graph, 'conv_relu6_mkldnn_fuse_pass')
+        # graph = self._apply_pass(graph, 'depthwise_conv_mkldnn_pass')
+        # graph = self._apply_pass(graph, 'conv_bn_fuse_pass')
+        # graph = self._apply_pass(graph, 'conv_eltwiseadd_bn_fuse_pass')
+        # graph = self._apply_pass(graph, 'conv_bias_mkldnn_fuse_pass')
+        # graph = self._apply_pass(graph, 'conv_elementwise_add_mkldnn_fuse_pass')
+        # graph = self._apply_pass(graph, 'conv_relu_mkldnn_fuse_pass')
+        # graph = self._apply_pass(graph, 'conv_relu6_mkldnn_fuse_pass')
+        graph = self._apply_pass(graph, 'fc_fuse_pass')
+        graph = self._apply_pass(graph, 'fc_mkldnn_pass')
         return graph
 
     def _apply_pass(self, graph, pass_name, attrs=None, attr_values=None):
@@ -528,6 +540,10 @@ class FakeQAT2MkldnnINT8PerfPass(object):
                         np.abs(weights.reshape(weights.shape[0], -1)).astype(
                             np.float64),
                         axis=axis)
+                    # scales = 1.0 / np.amax(
+                    #     np.abs(weights)).astype(
+                    #         np.float64)
+                    # scales[scales == np.Inf] = 0.0
 
                     lod_tensor = self._convert_scale2tensor(scales)
                     use_unsigned_int = False
@@ -546,31 +562,6 @@ class FakeQAT2MkldnnINT8PerfPass(object):
                     ids.append(op.id())
         return set(ids) if len(ids) else set([-1])
 
-    def _transform_to_quantize_mkldnn(self, graph, op_node):
-        """
-        Transform fake_quantize_xx op to quantize mkldnn op in the graph.
-        """
-        input_var_node = graph._find_node_by_name(op_node.inputs,
-                                                  op_node.input("X")[0])
-        output_var_node = graph._find_node_by_name(op_node.outputs,
-                                                   op_node.output("Out")[0])
-        scale_in = self._s8_max / self._load_param(
-            self._scope, op_node.input("InScale")[0])[0]
-        quant_op_node = graph.create_op_node(
-            op_type='quantize',
-            attrs={
-                'data_format': 'MKLDNNLAYOUT',
-                'use_mkldnn': 1,
-                'Scale': scale_in,
-                'is_negative_input': 1
-            },
-            inputs={'Input': input_var_node},
-            outputs={'Output': output_var_node})
-        graph.link_to(input_var_node, quant_op_node)
-        graph.link_to(quant_op_node, output_var_node)
-        graph.safe_remove_nodes(op_node)
-        return quant_op_node
-
     def _update_conv_relu_scales(self, graph):
         for op in graph.all_op_nodes():
             if op.name() in self._conv_ops:
@@ -580,12 +571,20 @@ class FakeQAT2MkldnnINT8PerfPass(object):
                    op.op().attr("fuse_residual_connection") == False:
                     _, tensor = self._var_quant_scales[out_name]
                     self._var_quant_scales[out_name] = (True, tensor)
+        for op in graph.all_op_nodes():
+            if op.name() in self._fc_ops:
+                out_name = op.output("Out")[0]
+                if out_name in self._var_quant_scales and \
+                   op.op().attr("activation_type") == 'relu':
+                    _, tensor = self._var_quant_scales[out_name]
+                    self._var_quant_scales[out_name] = (True, tensor)
         return graph
 
     def _quantize_fp32_graph(self, graph):
         ir_pass = self._core.get_pass('cpu_quantize_placement_pass')
         cpp_graph = graph.graph
-        ir_pass.set('quantize_enabled_op_types', {'conv2d', 'pool2d'})
+        ir_pass.set('quantize_enabled_op_types',
+                    {'transpose2', 'reshape2', 'fc'})
         ir_pass.set('quantize_excluded_op_ids',
                     self._find_avg_pooling_ids(graph))
         ir_pass.apply(cpp_graph)
