@@ -105,7 +105,7 @@ class QuantOpKernel : public framework::OpKernel<T> {
     astream.wait();
 
     output->set_layout(DataLayout::kMKLDNN);
-    auto format = GetMKLDNNFormat(*dst_memory);
+    // auto format = GetMKLDNNFormat(*dst_memory);
     output->set_format(GetMKLDNNFormat(*dst_memory));
   }
 };

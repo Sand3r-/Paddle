@@ -543,7 +543,7 @@ class FakeQAT2MkldnnINT8PerfPass(object):
                     # scales = 1.0 / np.amax(
                     #     np.abs(weights)).astype(
                     #         np.float64)
-                    # scales[scales == np.Inf] = 0.0
+                    scales[scales == np.Inf] = 0.0
 
                     lod_tensor = self._convert_scale2tensor(scales)
                     use_unsigned_int = False
@@ -584,7 +584,7 @@ class FakeQAT2MkldnnINT8PerfPass(object):
         ir_pass = self._core.get_pass('cpu_quantize_placement_pass')
         cpp_graph = graph.graph
         ir_pass.set('quantize_enabled_op_types',
-                    {'transpose2', 'reshape2', 'fc'})
+                    {'''transpose2', 'reshape2''', 'fc'})
         ir_pass.set('quantize_excluded_op_ids',
                     self._find_avg_pooling_ids(graph))
         ir_pass.apply(cpp_graph)
