@@ -71,6 +71,7 @@ class MatMulKernel : public framework::OpKernel<T> {
     auto mat_dim_b = math::CreateMatrixDescriptor(
         ColumnMatrixFromVector(y.dims()), 0, context.Attr<bool>("transpose_Y"));
     auto scale = static_cast<T>(context.Attr<float>("alpha"));
+    auto scale_residual = static_cast<T>(context.Attr<float>("beta"));
 
 #if defined(PADDLE_WITH_MKLML) && !defined(PADDLE_WITH_CUDA)
     int head_number = context.Attr<int>("head_number");
@@ -78,12 +79,12 @@ class MatMulKernel : public framework::OpKernel<T> {
 
     if (head_number > 1) {
       blas.MatMulWithHead(x, mat_dim_a, y, mat_dim_b, scale, head_number, out,
-                          T(0), split_vertical_y);
+                          scale_residual, split_vertical_y);
     } else {
-      blas.MatMul(x, mat_dim_a, y, mat_dim_b, scale, out, T(0));
+      blas.MatMul(x, mat_dim_a, y, mat_dim_b, scale, out, scale_residual);
     }
 #else
-    blas.MatMul(x, mat_dim_a, y, mat_dim_b, scale, out, T(0));
+    blas.MatMul(x, mat_dim_a, y, mat_dim_b, scale, out, scale_residual);
 #endif
   }
 };
@@ -401,6 +402,7 @@ class MatMulOpMaker : public framework::OpProtoAndCheckerMaker {
         )DOC")
         .SetDefault(false);
     AddAttr<float>("alpha", "The scale of Out").SetDefault(1.0f);
+    AddAttr<float>("beta", "The scale of residual data").SetDefault(0.0f);
 #if defined(PADDLE_WITH_MKLML) && !defined(PADDLE_WITH_CUDA)
     AddAttr<int>("head_number", "The number of heads of the matrix")
         .SetDefault(1);
