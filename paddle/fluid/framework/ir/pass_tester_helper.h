@@ -223,6 +223,20 @@ struct Layers {
     return out;
   }
 
+  VarDesc* stack(std::vector<VarDesc*> inputs, int axis = -1) {
+    VarDesc* out = lod_tensor(unique_name());
+    OpDesc* op = program_.MutableBlock(0)->AppendOp();
+    op->SetType("stack");
+    std::vector<std::string> input_names(inputs.size());
+    for (size_t i = 0; i < inputs.size(); ++i) {
+      input_names[i] = inputs[i]->Name();
+    }
+    op->SetInput("X", input_names);
+    op->SetOutput("Out", {out->Name()});
+    op->SetAttr("axis", axis);
+    return out;
+  }
+
   std::vector<VarDesc*> layer_norm(VarDesc* x, VarDesc* scale = nullptr,
                                    VarDesc* bias = nullptr) {
     VarDesc* y = lod_tensor(unique_name());
