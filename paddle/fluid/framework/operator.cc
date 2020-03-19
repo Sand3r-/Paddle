@@ -561,8 +561,6 @@ class RuntimeInferShapeContext : public InferShapeContext {
     if (out.size() == 0) {
       return false;
     }
-    PADDLE_ENFORCE_EQ(out.size(), 1UL,
-                      "Output %s should not have more than one outputs", name);
     return out[0] != nullptr;
   }
 
@@ -781,10 +779,9 @@ class RuntimeInferShapeContext : public InferShapeContext {
 
   void SetOutputDim(const std::string& name, const DDim& dim) override {
     auto& vars = OutputVars(name);
-    PADDLE_ENFORCE_EQ(vars.size(), 1UL,
-                      "Output(%s) should hold one element, but now it holds %d",
-                      name, vars.size());
-    SetDim(vars[0], dim);
+    for (auto& var : vars) {
+      SetDim(var, dim);
+    }
   }
 
   void SetOutputsDim(const std::string& name,

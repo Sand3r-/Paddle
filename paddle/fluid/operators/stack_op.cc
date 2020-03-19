@@ -77,7 +77,7 @@ class StackOpMaker : public framework::OpProtoAndCheckerMaker {
  public:
   void Make() override {
     AddInput("X", "The input of stack op.").AsDuplicable();
-    AddOutput("Y", "The output of stack op.");
+    AddOutput("Y", "The output of stack op.").AsDuplicable();
     AddAttr<int>("axis",
                  "The axis along which all of the Inputs(X) should be stacked.")
         .SetDefault(0);

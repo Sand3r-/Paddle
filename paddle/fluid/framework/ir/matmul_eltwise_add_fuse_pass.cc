@@ -14,6 +14,7 @@
 
 #include "paddle/fluid/framework/ir/matmul_eltwise_add_fuse_pass.h"
 #include <string>
+#include <vector>
 #include "paddle/fluid/framework/ir/graph_pattern_detector.h"
 
 namespace paddle {
@@ -21,8 +22,111 @@ namespace framework {
 namespace ir {
 
 void MatmulEltwiseAddFusePass::ApplyImpl(ir::Graph* graph) const {
-  FusePassBase::Init("matmul_eltwise_add_fuse_pass", graph);
-  // From
+  const char* name_scope_ = "matmul_eltwise_add_fuse_pass";
+  FusePassBase::Init(name_scope_, graph);
+
+  auto* scope = param_scope();
+  PADDLE_ENFORCE(scope);
+
+  // Duplicate stack's output tensor to designate each
+  // elementwise add a unique input from stack.
+  // This is needed in the fuse pass that follows.
+  // Example: transform from
+  //         [op]      [stack]
+  //          |           |
+  //      (op_out)  (stack_0.tmp_0)
+  //          \         /   \.
+  //          [eltwise_add]  |
+  //               |         |
+  //          (eltwise_out)  |
+  //               |         |
+  //             [op2]      /
+  //               |       /
+  //           (op2_out)  /
+  //               |     /
+  //         [eltwise_add]
+  // ----
+  // To
+  //                            [stack]
+  //                           /     \.
+  //                          /       |
+  //         [op]            /        |
+  //          |             /         |
+  //      (op_out)  (stack_0.tmp_0)   |
+  //          \         /             /
+  //          [eltwise_add]     _____/
+  //               |           |
+  //          (eltwise_out)    |
+  //               |           |
+  //             [op2]         |
+  //               |      (stack_0.tmp_1)
+  //           (op2_out)  /
+  //               |     /
+  //         [eltwise_add]
+
+  GraphPatternDetector stack_detector;
+  auto stack =
+      stack_detector.mutable_pattern()->NewNode("stack")->assert_is_op("stack");
+  auto stack_out = stack_detector.mutable_pattern()
+                       ->NewNode("stack_out")
+                       ->assert_is_op_output("stack")
+                       ->assert_is_op_input("elementwise_add");
+
+  stack->LinksTo({stack_out});
+
+  GraphPatternDetector::handle_t stack_handler = [&](
+      const GraphPatternDetector::subgraph_t& subgraph, Graph* graph) {
+    Node* stack_var = subgraph.at(stack);
+    Node* stack_out_var = subgraph.at(stack_out);
+
+    size_t num_stack_outputs = stack_out_var->outputs.size();
+    std::vector<std::string> out_var_names = stack_var->Op()->Output("Y");
+    std::string cur_stack_out_name = out_var_names[0];
+    // Iterator from 1, to preserve initial output variable
+    for (size_t i = 1; i < num_stack_outputs; i++) {
+      VarDesc* proto_var = stack_out_var->Var();
+      VarDesc out_var_desc(
+          patterns::PDNodeName(name_scope_, stack_out_var->Name()));
+      std::string name = out_var_desc.Name();
+      // Copy Variable properties
+      out_var_desc.SetShape(proto_var->GetShape());
+      out_var_desc.SetDataType(proto_var->GetDataType());
+      out_var_desc.SetLoDLevel(proto_var->GetLoDLevel());
+      // Create node in graph
+      Node* new_output = graph->CreateVarNode(&out_var_desc);
+      // Create variable in scope
+      scope->Var(name)->GetMutable<LoDTensor>();
+
+      // Rename input of eltwise add from stack.tmp_x to a newly created
+      // variable name
+      stack_out_var->outputs[i]->Op()->RenameInput(cur_stack_out_name, name);
+
+      // Remove the old name from elementwise_add inputs
+      auto& eltwise_inputs = stack_out_var->outputs[i]->inputs;
+      std::remove_if(eltwise_inputs.begin(), eltwise_inputs.end(),
+                     [&cur_stack_out_name](Node* n) {
+                       return n->Name() == cur_stack_out_name;
+                     });
+
+      // Link nodes in a graph
+      IR_NODE_LINK_TO(stack_var, new_output);
+      IR_NODE_LINK_TO(new_output, stack_out_var->outputs[i]);
+
+      // Append new variable to stack op's Out
+      out_var_names.push_back(name);
+    }
+    // Remove all links but one from initial stack output variable
+    stack_out_var->outputs.resize(1);
+    // Update the var name list of Stack's op output names
+    stack_var->Op()->SetOutput("Y", out_var_names);
+  };
+
+  stack_detector(graph, stack_handler);
+
+  // Following fuse pass replaces old matmul's output
+  // with the second input to elementwise_add and
+  // remove elementwise_add.
+  // Example: transform from
   //   [matmul]
   //      |
   // (matmul_out)  (residual_var)
@@ -39,8 +143,9 @@ void MatmulEltwiseAddFusePass::ApplyImpl(ir::Graph* graph) const {
   //     (residual_var)
   //           |
   //       [next_op]
-  auto HasOneOutput = [](Node* x) { return x->outputs.size() == 1UL; };
   GraphPatternDetector detector;
+  auto HasOneOutput = [](Node* x) { return x->outputs.size() == 1UL; };
+
   auto matmul =
       detector.mutable_pattern()->NewNode("matmul")->assert_is_op("matmul");
   auto matmul_out = detector.mutable_pattern()
@@ -52,6 +157,7 @@ void MatmulEltwiseAddFusePass::ApplyImpl(ir::Graph* graph) const {
                           ->NewNode("residual_var")
                           ->assert_is_op_input("elementwise_add")
                           // variable cannot be an input to any other op
+                          // since its contents will be overwritten
                           ->assert_more(HasOneOutput);
   auto eltwise_add = detector.mutable_pattern()
                          ->NewNode("elementwise_add")

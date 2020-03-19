@@ -199,10 +199,9 @@ class CompileTimeInferShapeContext : public InferShapeContext {
 
   void SetOutputDim(const std::string &name, const DDim &dim) override {
     auto arg_names = Outputs(name);
-    PADDLE_ENFORCE_EQ(arg_names.size(), 1UL,
-                      "Output(%s) should hold one element, but now it holds %d",
-                      name, arg_names.size());
-    SetDim(arg_names[0], dim);
+    for (auto &arg_name : arg_names) {
+      SetDim(arg_name, dim);
+    }
   }
 
   void SetOutputsDim(const std::string &name,

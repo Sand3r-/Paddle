@@ -67,6 +67,7 @@ TEST(MatmulElementwiseAddFusePass, applicable_fuse) {
   auto pass = PassRegistry::Instance().Get("matmul_eltwise_add_fuse_pass");
   VLOG(3) << DebugString(graph);
 
+  graph->Set("__param_scope__", new Scope());
   graph.reset(pass->Apply(graph.release()));
   int num_matmul_nodes_after = GetNumOpNodes(graph, "matmul");
   int num_eltwise_nodes_after = GetNumOpNodes(graph, "elementwise_add");
@@ -75,6 +76,86 @@ TEST(MatmulElementwiseAddFusePass, applicable_fuse) {
 
   PADDLE_ENFORCE_EQ(num_matmul_nodes_after, 1);
   PADDLE_ENFORCE_EQ(num_eltwise_nodes_after, 0);
+  PADDLE_ENFORCE_EQ(num_scale_nodes_after, 1);
+}
+
+TEST(MatmulElementwiseAddFusePass, fuse_with_stack_outputs) {
+  Layers layers;
+  // Again: Scale is used here as just an example of an
+  // op that follows elementwise_add. This test checks if
+  // stack output has been separated into several outputs
+  // when its output is supposed to be used as matmul's
+  // out.
+  // Before fuse:
+  // (x, y) -> matmul -> (matmul_out)
+  // (tmp_0, z) -> elementwise_add -> (eltwise_out)
+  // (tmp_1) -> scale -> (scale_out)
+  // After fuse:
+  // (x, y) -> matmul -> (z)
+  // (z) -> scale -> (tmp_2)
+  // ----
+  // Graph before fuse:
+  //    (x)     (y)      (z)
+  //       \    /         |
+  //       [matmul]    [stack]
+  //          |           |
+  //   (matmul_out)  (stack_0.tmp_0)
+  //          \         /   \.
+  //          [eltwise_add]  |
+  //               |         |
+  //          (eltwise_out)  |
+  //               |         |
+  //            [scale]     /
+  //               |       /
+  //          (scale_out) /
+  //               |     /
+  //         [eltwise_add]
+  // ----
+  // Graph after fuse:
+  //    (x)     (y)
+  //       \    /
+  //       [matmul]  [stack]
+  //          |       /  \.
+  //          |      /    \.
+  //           \    /      |
+  //            \  /       |
+  //  (stack_0.tmp_0)   (stack_0.tmp_1)
+  //             |         /
+  //          [scale]     /
+  //             |       /
+  //        (scale_out) /
+  //             |     /
+  //       [eltwise_add]
+  auto* x = layers.data("x");
+  auto* y = layers.data("y");
+  auto* z = layers.data("z");
+  auto* stack_out = layers.stack({z});
+  auto* matmul_out = layers.matmul(x, y);
+  auto* eltwise_out = layers.elementwise_add(matmul_out, stack_out);
+  auto* scale_out = layers.scale(eltwise_out, 1.0f, 0.0f, false);
+  layers.elementwise_add(scale_out, stack_out);
+
+  std::unique_ptr<Graph> graph(new Graph(layers.main_program()));
+  auto pass = PassRegistry::Instance().Get("matmul_eltwise_add_fuse_pass");
+  VLOG(3) << DebugString(graph);
+
+  graph->Set("__param_scope__", new Scope());
+  graph.reset(pass->Apply(graph.release()));
+  int num_matmul_nodes_after = GetNumOpNodes(graph, "matmul");
+  int num_eltwise_nodes_after = GetNumOpNodes(graph, "elementwise_add");
+  int num_scale_nodes_after = GetNumOpNodes(graph, "scale");
+  VLOG(3) << DebugString(graph);
+
+  for (auto& node : graph->Nodes()) {
+    if (node->IsOp()) {
+      if (node->Op()->Type() == "stack") {
+        PADDLE_ENFORCE_EQ(node->outputs.size(), 2);
+      }
+    }
+  }
+
+  PADDLE_ENFORCE_EQ(num_matmul_nodes_after, 1);
+  PADDLE_ENFORCE_EQ(num_eltwise_nodes_after, 1);
   PADDLE_ENFORCE_EQ(num_scale_nodes_after, 1);
 }
 
@@ -109,6 +190,7 @@ TEST(MatmulElementwiseAddFusePass, shared_residual_var) {
   auto pass = PassRegistry::Instance().Get("matmul_eltwise_add_fuse_pass");
   VLOG(3) << DebugString(graph);
 
+  graph->Set("__param_scope__", new Scope());
   graph.reset(pass->Apply(graph.release()));
   int num_matmul_nodes_after = GetNumOpNodes(graph, "matmul");
   int num_eltwise_nodes_after = GetNumOpNodes(graph, "elementwise_add");

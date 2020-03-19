@@ -55,7 +55,8 @@ class StackKernel : public framework::OpKernel<T> {
  public:
   void Compute(const framework::ExecutionContext &ctx) const override {
     auto x = ctx.MultiInput<Tensor>("X");
-    auto *y = ctx.Output<Tensor>("Y");
+    auto y_outs = ctx.MultiOutput<Tensor>("Y");
+    auto *y = y_outs[0];
 
     int axis = ctx.Attr<int>("axis");
     if (axis < 0) axis += (x[0]->dims().size() + 1);
@@ -81,6 +82,10 @@ class StackKernel : public framework::OpKernel<T> {
         y_offset += post;
       }
       x_offset += post;
+    }
+    for (size_t i = 1; i < y_outs.size(); i++) {
+      std::memcpy(y_outs[i]->mutable_data<T>(ctx.GetPlace()), y_data,
+                  y->numel() * sizeof(T));
     }
   }
 };
