@@ -83,6 +83,9 @@ class StackKernel : public framework::OpKernel<T> {
       }
       x_offset += post;
     }
+#ifdef PADDLE_WITH_MKLML
+#pragma omp parallel for
+#endif
     for (size_t i = 1; i < y_outs.size(); i++) {
       std::memcpy(y_outs[i]->mutable_data<T>(ctx.GetPlace()), y_data,
                   y->numel() * sizeof(T));
